@@ -1,0 +1,186 @@
+---
+title: 'Extension Pages'
+description: 'How CRXJS handles HTML pages with Vite HMR and optimizations'
+---
+
+## Overview
+
+CRXJS provides extension HTML pages with Vite HMR during development and optimizations in production builds. Extension pages include popups, options pages, and custom pages.
+
+## Standard Extension Pages
+
+The manifest can declare common extension pages:
+
+```json manifest.json
+{
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "options_page": "options.html",
+  "devtools_page": "devtools.html",
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  }
+}
+```
+
+CRXJS automatically:
+- Serves these pages from the Vite dev server during development
+- Bundles and optimizes them for production
+- Handles all imports and dependencies
+
+## Extra HTML Pages
+
+If you need additional HTML pages beyond those in the manifest, declare them in your Vite config under `build.rollupOptions.input`.
+
+```typescript vite.config.ts
+import { defineConfig } from 'vite'
+import { crx } from '@crxjs/vite-plugin'
+import manifest from './manifest.config'
+
+export default defineConfig({
+  plugins: [crx({ manifest })],
+  build: {
+    rollupOptions: {
+      input: {
+        welcome: 'pages/welcome.html',
+        onboarding: 'pages/onboarding.html',
+      },
+    },
+  },
+})
+```
+
+Vite will serve these pages during development and include optimized versions in the production build.
+
+<Tip>
+Use extra pages for onboarding flows, welcome screens, or any custom UI that doesn't fit in the standard extension pages.
+</Tip>
+
+## Opening Extra Pages
+
+You can open extra pages from your extension code:
+
+```typescript background.ts
+// Open on install
+chrome.runtime.onInstalled.addListener((details) => {
+  if (details.reason === 'install') {
+    chrome.tabs.create({ url: 'pages/welcome.html' })
+  }
+})
+
+// Open from popup
+chrome.runtime.getURL('pages/onboarding.html')
+```
+
+## Development vs Production
+
+During development, HTML pages load from the Vite dev server with HMR enabled:
+
+```html
+<!-- Development -->
+http://localhost:5173/popup.html
+```
+
+In production, pages are bundled as extension resources:
+
+```html
+<!-- Production -->
+chrome-extension://<extension-id>/popup.html
+```
+
+## Loading Placeholder Pages
+
+During development, CRXJS emits placeholder HTML files that redirect to the Vite dev server. This ensures the extension loads correctly while preserving HMR functionality.
+
+From the source code (plugin-manifest.ts:461):
+
+```typescript
+if (config.command === 'serve' && files.html.length) {
+  // Emit loading page placeholder
+  files.html.map((f) =>
+    this.emitFile({
+      type: 'asset',
+      fileName: f,
+      source: loadingPageHtml.replace('%SCRIPT%', `/${loadingPageScriptName}`),
+    }),
+  )
+}
+```
+
+## HTML in Content Scripts
+
+You can inject extension pages into host pages using iframes. See the [Content Scripts](/concepts/content-scripts) page for details on HTML in content scripts.
+
+## Page Imports
+
+Extension pages support all Vite features:
+
+```typescript popup.ts
+// Import CSS
+import './popup.css'
+
+// Import images
+import logo from './logo.png'
+
+// Import components
+import { App } from './App'
+
+// Use frameworks
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+)
+```
+
+## Hot Module Replacement
+
+Extension pages support full HMR during development:
+
+- **React**: Fast Refresh preserves component state
+- **Vue**: HMR updates components without page reload
+- **CSS**: Style changes apply instantly
+- **Assets**: Image updates reflect immediately
+
+<Note>
+Learn more about HMR in the [HMR documentation](/concepts/hmr).
+</Note>
+
+## TypeScript Support
+
+Use TypeScript for your page entry files:
+
+```html popup.html
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Popup</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/popup.tsx"></script>
+  </body>
+</html>
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Manifest" icon="file" href="/concepts/manifest">
+    Configure your extension manifest
+  </Card>
+  
+  <Card title="HMR" icon="bolt" href="/concepts/hmr">
+    Hot Module Replacement for extensions
+  </Card>
+  
+  <Card title="Content Scripts" icon="file-code" href="/concepts/content-scripts">
+    Inject HTML into web pages
+  </Card>
+</CardGroup>

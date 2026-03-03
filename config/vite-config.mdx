@@ -1,0 +1,388 @@
+---
+title: "Vite Configuration"
+description: "Recommended Vite configuration settings for CRXJS"
+---
+
+CRXJS works seamlessly with Vite's configuration system. This guide covers recommended Vite settings and CRXJS-specific considerations.
+
+## Basic Configuration
+
+Create or update your `vite.config.ts` file:
+
+```typescript
+import { defineConfig } from 'vite'
+import { crx } from '@crxjs/vite-plugin'
+import manifest from './manifest.json'
+
+export default defineConfig({
+  plugins: [
+    crx({ manifest })
+  ],
+  build: {
+    // Recommended: keep exports in content scripts for dynamic imports
+    rollupOptions: {
+      preserveEntrySignatures: 'exports-only'
+    }
+  }
+})
+```
+
+## Essential Settings
+
+### Entry Points
+
+<Note>
+  You typically don't need to manually configure `build.rollupOptions.input` with CRXJS. The plugin automatically extracts entry points from your manifest.
+</Note>
+
+CRXJS automatically configures entry points based on your manifest:
+
+- `background.service_worker` or `background.scripts`
+- `content_scripts[].js`
+- `action.default_popup`
+- `options_page` or `options_ui.page`
+- `devtools_page`
+- `side_panel.default_path`
+
+### Preserve Entry Signatures
+
+CRXJS automatically sets `preserveEntrySignatures: 'exports-only'` to support the [Content Script Module API](https://developer.chrome.com/docs/extensions/reference/api/scripting#type-ExecutionWorld). This allows content scripts to export an `onExecute` function.
+
+```typescript
+export default defineConfig({
+  build: {
+    rollupOptions: {
+      // CRXJS sets this automatically
+      preserveEntrySignatures: 'exports-only'
+    }
+  }
+})
+```
+
+### Output Directory
+
+<ParamField path="build.outDir" type="string">
+  Directory where the built extension is output.
+
+  **Default:** `'dist'`
+</ParamField>
+
+```typescript
+export default defineConfig({
+  build: {
+    outDir: 'dist/chrome-extension'
+  }
+})
+```
+
+## Development Server
+
+### Port Configuration
+
+<ParamField path="server.port" type="number">
+  Development server port. During development, your extension loads resources from `http://localhost:[port]`.
+
+  **Default:** `5173`
+</ParamField>
+
+```typescript
+export default defineConfig({
+  server: {
+    port: 3000,
+    strictPort: true, // Fail if port is already in use
+  }
+})
+```
+
+<Warning>
+  Ensure your development port is consistent. Changing the port requires reloading the extension in Chrome.
+</Warning>
+
+### HTTPS Configuration
+
+For testing features that require HTTPS (like camera/microphone access):
+
+```typescript
+export default defineConfig({
+  server: {
+    https: true,
+    port: 5173
+  }
+})
+```
+
+### HMR Configuration
+
+<ParamField path="server.hmr" type="boolean | object">
+  Hot Module Replacement settings. CRXJS provides custom HMR for content scripts.
+</ParamField>
+
+```typescript
+export default defineConfig({
+  server: {
+    hmr: {
+      protocol: 'ws',
+      host: 'localhost',
+      port: 5173
+    }
+  }
+})
+```
+
+## Build Options
+
+### Source Maps
+
+<ParamField path="build.sourcemap" type="boolean | 'inline' | 'hidden'">
+  Generate source maps for debugging. CRXJS automatically includes source maps in `web_accessible_resources`.
+
+  **Default:** `false`
+</ParamField>
+
+```typescript
+export default defineConfig({
+  build: {
+    sourcemap: true // or 'inline' or 'hidden'
+  }
+})
+```
+
+<Tip>
+  Enable source maps in development for easier debugging. They're automatically added to `web_accessible_resources` so Chrome DevTools can load them.
+</Tip>
+
+### Minification
+
+```typescript
+export default defineConfig({
+  build: {
+    minify: 'terser', // or 'esbuild'
+    terserOptions: {
+      compress: {
+        drop_console: true, // Remove console.log in production
+      }
+    }
+  }
+})
+```
+
+### Target Browsers
+
+<ParamField path="build.target" type="string | string[]">
+  JavaScript compatibility target. Chrome extensions run in Chrome, so you can use modern JavaScript.
+
+  **Default:** `'modules'`
+</ParamField>
+
+```typescript
+export default defineConfig({
+  build: {
+    target: 'esnext' // Use latest JavaScript features
+  }
+})
+```
+
+## Multi-Browser Configuration
+
+To build for both Chrome and Firefox:
+
+```typescript
+import { defineConfig } from 'vite'
+import { crx } from '@crxjs/vite-plugin'
+import manifest from './manifest.json'
+
+export default defineConfig(({ mode }) => {
+  const browser = mode === 'firefox' ? 'firefox' : 'chrome'
+  
+  return {
+    plugins: [
+      crx({ 
+        manifest,
+        browser 
+      })
+    ],
+    build: {
+      outDir: `dist/${browser}`
+    }
+  }
+})
+```
+
+Build commands:
+
+```bash
+# Build for Chrome
+vite build
+
+# Build for Firefox
+vite build --mode firefox
+```
+
+## Framework Integration
+
+### React
+
+```typescript
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import { crx } from '@crxjs/vite-plugin'
+import manifest from './manifest.json'
+
+export default defineConfig({
+  plugins: [
+    react(),
+    crx({ manifest })
+  ]
+})
+```
+
+<Note>
+  CRXJS automatically configures React Fast Refresh for content scripts when `@vitejs/plugin-react` is detected.
+</Note>
+
+### Vue
+
+```typescript
+import { defineConfig } from 'vite'
+import vue from '@vitejs/plugin-vue'
+import { crx } from '@crxjs/vite-plugin'
+import manifest from './manifest.json'
+
+export default defineConfig({
+  plugins: [
+    vue(),
+    crx({ manifest })
+  ]
+})
+```
+
+### Svelte
+
+```typescript
+import { defineConfig } from 'vite'
+import { svelte } from '@sveltejs/vite-plugin-svelte'
+import { crx } from '@crxjs/vite-plugin'
+import manifest from './manifest.json'
+
+export default defineConfig({
+  plugins: [
+    svelte(),
+    crx({ manifest })
+  ]
+})
+```
+
+## Path Aliases
+
+Configure path aliases for cleaner imports:
+
+```typescript
+import { defineConfig } from 'vite'
+import path from 'path'
+
+export default defineConfig({
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+      '@components': path.resolve(__dirname, './src/components'),
+      '@utils': path.resolve(__dirname, './src/utils')
+    }
+  }
+})
+```
+
+Usage:
+
+```typescript
+import Button from '@components/Button'
+import { formatDate } from '@utils/date'
+```
+
+## Environment Variables
+
+CRXJS supports Vite's environment variable system:
+
+```typescript
+// vite.config.ts
+export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(process.env.npm_package_version)
+  }
+})
+```
+
+Create `.env` files:
+
+```bash
+# .env.development
+VITE_API_URL=http://localhost:3000
+
+# .env.production
+VITE_API_URL=https://api.example.com
+```
+
+Access in your code:
+
+```typescript
+const apiUrl = import.meta.env.VITE_API_URL
+```
+
+<Warning>
+  Only variables prefixed with `VITE_` are exposed to your extension code. Never commit sensitive credentials to `.env` files.
+</Warning>
+
+## Complete Example
+
+```typescript
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import { crx } from '@crxjs/vite-plugin'
+import manifest from './manifest.json'
+import path from 'path'
+
+export default defineConfig(({ mode }) => {
+  const isDev = mode === 'development'
+  const browser = process.env.TARGET_BROWSER || 'chrome'
+  
+  return {
+    plugins: [
+      react(),
+      crx({ 
+        manifest,
+        browser: browser as 'chrome' | 'firefox',
+        contentScripts: {
+          hmrTimeout: isDev ? 10000 : 5000
+        }
+      })
+    ],
+    resolve: {
+      alias: {
+        '@': path.resolve(__dirname, './src')
+      }
+    },
+    server: {
+      port: 5173,
+      strictPort: true
+    },
+    build: {
+      outDir: `dist/${browser}`,
+      sourcemap: isDev,
+      minify: !isDev,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            // Split vendor code for better caching
+            vendor: ['react', 'react-dom']
+          }
+        }
+      }
+    }
+  }
+})
+```
+
+## See Also
+
+- [Plugin Options](/config/plugin-options) - CRXJS-specific configuration
+- [Content Script Options](/config/content-script-options) - Content script behavior
+- [Vite Documentation](https://vitejs.dev/config/) - Full Vite configuration reference

@@ -1,0 +1,375 @@
+---
+title: defineDynamicResource()
+description: Helper function for defining web accessible resources with match patterns for dynamically imported content scripts
+---
+
+`defineDynamicResource()` is a helper function that creates `web_accessible_resources` entries for dynamically imported content script resources. It automatically manages resource paths for CSS, images, and other assets imported by content scripts.
+
+## Usage
+
+```typescript
+import { defineManifest, defineDynamicResource } from '@crxjs/vite-plugin'
+
+export default defineManifest({
+  manifest_version: 3,
+  name: 'My Extension',
+  version: '1.0.0',
+  web_accessible_resources: [
+    defineDynamicResource({
+      matches: ['https://example.com/*', 'https://github.com/*'],
+    }),
+  ],
+})
+```
+
+## Function Signature
+
+```typescript
+function defineDynamicResource({
+  matches,
+  use_dynamic_url,
+}: Omit<WebAccessibleResourceByMatch, 'resources'>): WebAccessibleResourceByMatch
+```
+
+## Parameters
+
+<ParamField path="matches" type="string[]" default="['http://*/*', 'https://*/*']">
+  Array of match patterns that specify which web pages can access the resources.
+  
+  ```typescript
+  defineDynamicResource({
+    matches: [
+      'https://example.com/*',
+      'https://*.github.com/*',
+      'http://localhost/*',
+    ],
+  })
+  ```
+  
+  <Note>
+    If omitted, defaults to `['http://*/*', 'https://*/*']` which allows all HTTP and HTTPS origins.
+  </Note>
+</ParamField>
+
+<ParamField path="use_dynamic_url" type="boolean" default="false">
+  If `true`, resources can be accessed via `chrome.runtime.getURL()` with dynamically generated URLs.
+  
+  ```typescript
+  defineDynamicResource({
+    matches: ['https://example.com/*'],
+    use_dynamic_url: true,
+  })
+  ```
+</ParamField>
+
+## Return Type
+
+```typescript
+interface WebAccessibleResourceByMatch {
+  matches: string[]
+  resources: ['<dynamic_resource>']
+  use_dynamic_url?: boolean
+}
+```
+
+The function returns a `web_accessible_resources` entry with:
+- The provided `matches` array
+- A special `resources` array containing `'<dynamic_resource>'`
+- The optional `use_dynamic_url` flag
+
+The `<dynamic_resource>` sentinel value tells CRXJS to automatically populate this array with all resources imported by your content scripts during the build process.
+
+## Why Dynamic Resources?
+
+Chrome Manifest V3 requires that content script resources (CSS, images, fonts, etc.) be declared in `web_accessible_resources` with specific match patterns. This prevents unauthorized websites from accessing your extension's resources.
+
+However, managing these resource lists manually is error-prone:
+
+```typescript
+// ❌ Manual approach - easy to forget files
+web_accessible_resources: [{
+  matches: ['https://example.com/*'],
+  resources: [
+    'assets/content-style-abc123.css',
+    'assets/icon-def456.png',
+    'assets/font-ghi789.woff2',
+    // Did we list everything?
+  ]
+}]
+```
+
+`defineDynamicResource()` automates this:
+
+```typescript
+// ✓ Automatic approach - CRXJS tracks all imports
+web_accessible_resources: [
+  defineDynamicResource({
+    matches: ['https://example.com/*'],
+  }),
+]
+```
+
+## Examples
+
+### Basic Usage
+
+```typescript
+import { defineManifest, defineDynamicResource } from '@crxjs/vite-plugin'
+
+export default defineManifest({
+  manifest_version: 3,
+  name: 'My Extension',
+  version: '1.0.0',
+  content_scripts: [{
+    matches: ['https://example.com/*'],
+    js: ['src/content.ts'],
+  }],
+  web_accessible_resources: [
+    defineDynamicResource({
+      matches: ['https://example.com/*'],
+    }),
+  ],
+})
+```
+
+### Multiple Match Patterns
+
+```typescript
+web_accessible_resources: [
+  defineDynamicResource({
+    matches: [
+      'https://google.com/*',
+      'https://*.github.com/*',
+      'https://stackoverflow.com/*',
+    ],
+  }),
+]
+```
+
+### With Dynamic URLs
+
+```typescript
+web_accessible_resources: [
+  defineDynamicResource({
+    matches: ['https://example.com/*'],
+    use_dynamic_url: true,
+  }),
+]
+```
+
+### Multiple Resource Groups
+
+You can define multiple dynamic resource groups for different match patterns:
+
+```typescript
+web_accessible_resources: [
+  // Resources for Google sites
+  defineDynamicResource({
+    matches: ['https://*.google.com/*'],
+  }),
+  // Resources for GitHub
+  defineDynamicResource({
+    matches: ['https://github.com/*', 'https://*.github.com/*'],
+  }),
+  // Resources for local development
+  defineDynamicResource({
+    matches: ['http://localhost/*'],
+  }),
+]
+```
+
+## How It Works
+
+During the build process, CRXJS:
+
+1. Analyzes your content script imports (CSS, images, fonts, etc.)
+2. Tracks all assets that need to be web-accessible
+3. Replaces `<dynamic_resource>` with the actual list of generated asset paths
+4. Applies the match patterns you specified
+
+### Example Build Output
+
+Given this source:
+
+```typescript
+// manifest.config.ts
+web_accessible_resources: [
+  defineDynamicResource({
+    matches: ['https://example.com/*'],
+  }),
+]
+```
+
+```typescript
+// src/content.ts
+import './content.css'
+import iconUrl from './icon.png'
+```
+
+CRXJS generates this manifest:
+
+```json
+{
+  "web_accessible_resources": [{
+    "matches": ["https://example.com/*"],
+    "resources": [
+      "assets/content-abc123.css",
+      "assets/icon-def456.png"
+    ]
+  }]
+}
+```
+
+## Match Pattern Syntax
+
+Match patterns follow the Chrome extension match pattern format:
+
+- `*://example.com/*` - Any protocol
+- `https://*/*` - All HTTPS sites
+- `https://*.google.com/*` - Google and all subdomains
+- `https://example.com/path/*` - Specific path prefix
+- `file:///*.mp3` - Local files
+
+<Warning>
+  Be specific with match patterns. Avoid using `*://*/*` unless your extension truly needs to expose resources to all websites.
+</Warning>
+
+## TypeScript Types
+
+### WebAccessibleResourceByMatch
+
+```typescript
+interface WebAccessibleResourceByMatch {
+  matches: string[]
+  resources: string[]
+  use_dynamic_url?: boolean
+}
+```
+
+### DYNAMIC_RESOURCE Constant
+
+```typescript
+const DYNAMIC_RESOURCE = '<dynamic_resource>' as const
+```
+
+This sentinel value is replaced by CRXJS during the build process.
+
+## Best Practices
+
+### Match Content Script Patterns
+
+Your `web_accessible_resources` matches should align with your `content_scripts` matches:
+
+```typescript
+export default defineManifest({
+  manifest_version: 3,
+  name: 'My Extension',
+  version: '1.0.0',
+  content_scripts: [{
+    matches: ['https://example.com/*', 'https://github.com/*'],
+    js: ['src/content.ts'],
+  }],
+  web_accessible_resources: [
+    // Same match patterns as content_scripts
+    defineDynamicResource({
+      matches: ['https://example.com/*', 'https://github.com/*'],
+    }),
+  ],
+})
+```
+
+### Separate Dev and Prod Patterns
+
+Use different match patterns for development and production:
+
+```typescript
+import type { ConfigEnv } from 'vite'
+
+export default defineManifest((env: ConfigEnv) => {
+  const isDev = env.mode === 'development'
+  
+  return {
+    manifest_version: 3,
+    name: 'My Extension',
+    version: '1.0.0',
+    web_accessible_resources: [
+      defineDynamicResource({
+        matches: isDev
+          ? ['http://localhost/*', 'https://*/*']
+          : ['https://example.com/*'],
+      }),
+    ],
+  }
+})
+```
+
+### Minimize Exposure
+
+Only expose resources to the origins that need them:
+
+```typescript
+// ❌ Too permissive
+web_accessible_resources: [
+  defineDynamicResource({
+    matches: ['*://*/*'], // All sites can access resources
+  }),
+]
+
+// ✓ Specific and secure
+web_accessible_resources: [
+  defineDynamicResource({
+    matches: ['https://example.com/*'], // Only example.com
+  }),
+]
+```
+
+## Limitations
+
+### Content Scripts Only
+
+`defineDynamicResource()` is designed for content script resources. For other web-accessible resources, define them manually:
+
+```typescript
+web_accessible_resources: [
+  // Dynamic content script resources
+  defineDynamicResource({
+    matches: ['https://example.com/*'],
+  }),
+  // Static resources accessed by web pages
+  {
+    matches: ['https://example.com/*'],
+    resources: ['public/injected-script.js'],
+  },
+]
+```
+
+### No Firefox Support
+
+Firefox uses a different format for `web_accessible_resources`. If you're targeting Firefox, you may need conditional logic:
+
+```typescript
+import type { ConfigEnv } from 'vite'
+
+export default defineManifest((env: ConfigEnv) => {
+  const isFirefox = process.env.BROWSER === 'firefox'
+  
+  return {
+    manifest_version: 3,
+    name: 'My Extension',
+    version: '1.0.0',
+    web_accessible_resources: isFirefox
+      ? undefined // Handle Firefox separately
+      : [
+          defineDynamicResource({
+            matches: ['https://example.com/*'],
+          }),
+        ],
+  }
+})
+```
+
+## Related
+
+- [defineManifest()](/api/define-manifest) - Define type-safe manifest configurations
+- [Content Scripts](/concepts/content-scripts) - Guide to content script development
+- [Web Accessible Resources](https://developer.chrome.com/docs/extensions/mv3/manifest/web_accessible_resources/) - Chrome documentation

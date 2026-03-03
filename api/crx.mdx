@@ -1,0 +1,165 @@
+---
+title: "crx()"
+description: "The main Vite plugin function for building Chrome Extensions"
+---
+
+The `crx()` function is the main entry point for the CRXJS Vite Plugin. It returns an array of Vite plugins that handle all aspects of Chrome Extension development, including manifest processing, content scripts, background scripts, HMR, and more.
+
+## Signature
+
+```typescript
+function crx(options: {
+  manifest: ManifestV3Export
+} & CrxOptions): PluginOption[]
+```
+
+## Parameters
+
+<ParamField path="manifest" type="ManifestV3Export" required>
+  Your Chrome Extension manifest configuration. Can be:
+  - A `ManifestV3` object
+  - A `Promise<ManifestV3>`
+  - A function `(env: ConfigEnv) => ManifestV3 | Promise<ManifestV3>`
+  
+  Use with `defineManifest()` for best type safety.
+</ParamField>
+
+<ParamField path="contentScripts" type="object">
+  Configuration for content script handling.
+  
+  <ParamField path="contentScripts.preambleCode" type="string | false">
+    Custom code to inject at the beginning of content scripts. Set to `false` to disable.
+  </ParamField>
+  
+  <ParamField path="contentScripts.hmrTimeout" type="number">
+    Timeout in milliseconds for HMR connections in content scripts.
+  </ParamField>
+  
+  <ParamField path="contentScripts.injectCss" type="boolean">
+    Whether to automatically inject CSS into content scripts. Default: `true`.
+  </ParamField>
+</ParamField>
+
+<ParamField path="browser" type="'chrome' | 'firefox'">
+  Target browser for the extension. Default: `'chrome'`.
+  
+  Set to `'firefox'` when building for Firefox to enable Firefox-specific manifest handling.
+</ParamField>
+
+<ParamField path="fastGlobOptions" type="FastGlobOptions">
+  Options passed to [fast-glob](https://github.com/mrmlnc/fast-glob#options-3) for file matching operations.
+</ParamField>
+
+## Returns
+
+<ResponseField name="return" type="PluginOption[]">
+  An array of Vite plugins that collectively handle Chrome Extension development. This includes plugins for:
+  - Manifest processing and validation
+  - Background script bundling
+  - Content script handling (static, dynamic, and declared)
+  - Hot module replacement (HMR)
+  - Web accessible resources
+  - CSS injection
+  - Public asset handling
+</ResponseField>
+
+## Usage
+
+### Basic Usage
+
+```typescript vite.config.ts
+import { defineConfig } from 'vite'
+import { crx } from '@crxjs/vite-plugin'
+import manifest from './manifest.json'
+
+export default defineConfig({
+  plugins: [crx({ manifest })],
+})
+```
+
+### With defineManifest
+
+```typescript vite.config.ts
+import { defineConfig } from 'vite'
+import { crx, defineManifest } from '@crxjs/vite-plugin'
+
+const manifest = defineManifest({
+  manifest_version: 3,
+  name: 'My Extension',
+  version: '1.0.0',
+  action: {
+    default_popup: 'src/popup.html',
+  },
+})
+
+export default defineConfig({
+  plugins: [crx({ manifest })],
+})
+```
+
+### With Options
+
+```typescript vite.config.ts
+import { defineConfig } from 'vite'
+import { crx, defineManifest } from '@crxjs/vite-plugin'
+import manifest from './src/manifest.ts'
+
+export default defineConfig({
+  plugins: [
+    crx({
+      manifest,
+      browser: 'firefox',
+      contentScripts: {
+        hmrTimeout: 5000,
+        injectCss: true,
+      },
+    }),
+  ],
+})
+```
+
+### Dynamic Manifest
+
+```typescript vite.config.ts
+import { defineConfig } from 'vite'
+import { crx, defineManifest } from '@crxjs/vite-plugin'
+
+const manifest = defineManifest((env) => ({
+  manifest_version: 3,
+  name: env.mode === 'production' ? 'My Extension' : 'My Extension (Dev)',
+  version: '1.0.0',
+  background: {
+    service_worker: 'src/background.ts',
+    type: 'module',
+  },
+}))
+
+export default defineConfig({
+  plugins: [crx({ manifest })],
+})
+```
+
+## Plugin Architecture
+
+The `crx()` function returns an array of internal plugins that work together:
+
+- **pluginOptionsProvider**: Provides options to other plugins
+- **pluginBackground**: Handles service worker and background scripts
+- **pluginContentScripts**: Processes content scripts
+- **pluginDeclaredContentScripts**: Handles manifest-declared content scripts
+- **pluginDynamicContentScripts**: Handles dynamically registered content scripts
+- **pluginFileWriter**: Writes processed files to disk
+- **pluginFileWriterPublic**: Handles public directory assets
+- **pluginFileWriterPolyfill**: Adds browser API polyfills
+- **pluginHtmlInlineScripts**: Handles inline scripts in HTML
+- **pluginWebAccessibleResources**: Processes web accessible resources
+- **pluginContentScriptsCss**: Handles content script CSS injection
+- **pluginHMR**: Provides hot module replacement
+- **pluginManifest**: Generates the final manifest.json
+- **pluginPrint**: Prints build information
+
+## See Also
+
+- [chromeExtension()](/api/chrome-extension) - Alias for `crx()`
+- [defineManifest()](/api/define-manifest) - Helper for defining manifests
+- [CrxPlugin](/api/crx-plugin-interface) - Custom plugin interface

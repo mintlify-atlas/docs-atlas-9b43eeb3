@@ -1,0 +1,205 @@
+---
+title: 'Background Scripts'
+description: 'How CRXJS handles service workers and background scripts'
+---
+
+## Overview
+
+Chrome Extensions use **service workers** to listen for Chrome API events in the background. CRXJS provides HMR support and automatic configuration for background scripts.
+
+## Service Worker Configuration
+
+Add a service worker to your extension in the manifest under `background.service_worker`. CRXJS uses module-type service workers because Vite uses the ES module format.
+
+```json manifest.json
+{
+  "background": {
+    "service_worker": "src/background.ts",
+    "type": "module"
+  }
+}
+```
+
+<Info>
+The `type: "module"` field is required for ES module service workers.
+</Info>
+
+## How CRXJS Handles Background Scripts
+
+CRXJS creates a loader file at the root of your extension to ensure the service worker behaves consistently in development and production.
+
+### Development Mode
+
+During development, CRXJS:
+
+1. Creates a loader file that imports from the Vite dev server
+2. Includes the HMR client for hot updates
+3. Loads your service worker code from localhost
+
+From the source code (plugin-background.ts:82):
+
+```typescript
+// Development loader
+loader = `import '${proto}://localhost:${port}/@vite/env';\n`
+loader += `import '${proto}://localhost:${port}${workerClientId}';\n`
+if (worker)
+  loader += `import '${proto}://localhost:${port}/${worker}';\n`
+```
+
+### Production Mode
+
+In production, the loader simply imports your bundled service worker:
+
+```javascript
+import './src/background.js';
+```
+
+## Hot Module Replacement
+
+Changes to background scripts trigger a **full extension reload** because service workers control the entire extension lifecycle.
+
+From the source code (plugin-hmr.ts:122):
+
+```typescript
+// Check if changed file is a background dependency
+if (inputManifestFiles.background.length) {
+  const background = prefix('/', inputManifestFiles.background[0])
+  if (
+    relFiles.has(background) ||
+    modules.some(isImporter(join(server.config.root, background)))
+  ) {
+    debug('sending runtime reload')
+    server.ws.send(crxRuntimeReload)
+  }
+}
+```
+
+<Warning>
+Unlike content scripts and pages, background scripts cannot hot reload without restarting the entire extension.
+</Warning>
+
+## Service Worker Examples
+
+### Basic Service Worker
+
+```typescript src/background.ts
+console.log('Background service worker loaded')
+
+// Listen for extension installation
+chrome.runtime.onInstalled.addListener(() => {
+  console.log('Extension installed')
+})
+
+// Handle messages from content scripts
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log('Received message:', message)
+  sendResponse({ status: 'ok' })
+})
+```
+
+### Using Chrome APIs
+
+```typescript src/background.ts
+// Listen for tab updates
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status === 'complete' && tab.url) {
+    console.log('Tab loaded:', tab.url)
+  }
+})
+
+// Handle keyboard commands
+chrome.commands.onCommand.addListener((command) => {
+  console.log('Command:', command)
+})
+
+// Manage storage
+chrome.storage.local.set({ key: 'value' })
+chrome.storage.local.get(['key'], (result) => {
+  console.log('Value:', result.key)
+})
+```
+
+### Importing Dependencies
+
+```typescript src/background.ts
+// Import npm packages
+import { nanoid } from 'nanoid'
+
+// Import utilities
+import { logger } from './utils/logger'
+
+// Import types
+import type { Message } from './types'
+
+chrome.runtime.onMessage.addListener((message: Message) => {
+  const id = nanoid()
+  logger.log('Message received with ID:', id)
+})
+```
+
+## Firefox Support
+
+Firefox uses background scripts instead of service workers. CRXJS handles this automatically:
+
+```typescript
+if (browser === 'firefox') {
+  manifest.background = {
+    scripts: [this.getFileName(refId)],
+    type: 'module',
+  }
+}
+```
+
+Use the same code for both browsers - CRXJS adapts the manifest format.
+
+## Service Worker Scope
+
+Service workers can only intercept requests within their scope. CRXJS places the loader at the extension root to ensure full coverage.
+
+<Tip>
+Read more in this [Stack Overflow answer](https://stackoverflow.com/a/35780776/4842857) about service worker scope.
+</Tip>
+
+## TypeScript Support
+
+Use TypeScript with full Chrome API types:
+
+```typescript src/background.ts
+// Install @types/chrome
+import type { Tabs } from 'chrome'
+
+chrome.tabs.query({ active: true, currentWindow: true }, (tabs: Tabs.Tab[]) => {
+  const currentTab = tabs[0]
+  console.log('Current tab:', currentTab.url)
+})
+```
+
+## Debugging
+
+During development, inspect your service worker:
+
+1. Open `chrome://extensions`
+2. Enable **Developer mode**
+3. Find your extension and click **service worker**
+4. Use the DevTools console to debug
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Manifest" icon="file" href="/concepts/manifest">
+    Configure background scripts
+  </Card>
+  
+  <Card title="HMR" icon="bolt" href="/concepts/hmr">
+    Understand extension reloading
+  </Card>
+  
+  <Card title="Content Scripts" icon="file-code" href="/concepts/content-scripts">
+    Communicate with content scripts
+  </Card>
+</CardGroup>
+
+## Learn More
+
+- [Chrome Extension Service Workers](https://developer.chrome.com/docs/extensions/mv3/service_workers/)
+- [Service Worker Basics](https://developer.chrome.com/docs/extensions/mv3/service_workers/basics/)

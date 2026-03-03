@@ -1,0 +1,374 @@
+---
+title: Installation
+description: Add CRXJS Vite Plugin to your project with npm, yarn, or pnpm
+---
+
+# Installation
+
+This guide covers adding CRXJS Vite Plugin to an existing Vite project or setting up a new project from scratch.
+
+<Tip>
+  Want to get started quickly? Use `npm create crxjs@latest` to scaffold a new project. See the [Quick start](/quickstart) guide.
+</Tip>
+
+## Prerequisites
+
+Before installing CRXJS, ensure you have:
+
+- Node.js 14.18+ or 16+
+- A Vite project (or create one using `npm create vite@latest`)
+
+## Install the plugin
+
+Install `@crxjs/vite-plugin` as a dev dependency:
+
+<CodeGroup>
+
+```bash npm
+npm install --save-dev @crxjs/vite-plugin
+```
+
+```bash yarn
+yarn add -D @crxjs/vite-plugin
+```
+
+```bash pnpm
+pnpm add -D @crxjs/vite-plugin
+```
+
+</CodeGroup>
+
+## Create a manifest
+
+Create a `manifest.json` file in your project root. This file defines your extension's metadata and entry points:
+
+```json manifest.json
+{
+  "manifest_version": 3,
+  "name": "My Chrome Extension",
+  "version": "1.0.0",
+  "action": {
+    "default_popup": "index.html"
+  }
+}
+```
+
+<Note>
+  CRXJS supports Manifest V3, the latest version of the Chrome Extension manifest format with enhanced security features.
+</Note>
+
+### Manifest examples
+
+Here are some common manifest configurations:
+
+<CodeGroup>
+
+```json Popup page
+{
+  "manifest_version": 3,
+  "name": "My Extension",
+  "version": "1.0.0",
+  "action": {
+    "default_popup": "index.html"
+  }
+}
+```
+
+```json Background worker
+{
+  "manifest_version": 3,
+  "name": "My Extension",
+  "version": "1.0.0",
+  "background": {
+    "service_worker": "src/background.js"
+  }
+}
+```
+
+```json Content script
+{
+  "manifest_version": 3,
+  "name": "My Extension",
+  "version": "1.0.0",
+  "content_scripts": [
+    {
+      "matches": ["https://example.com/*"],
+      "js": ["src/content.js"]
+    }
+  ]
+}
+```
+
+```json Options page
+{
+  "manifest_version": 3,
+  "name": "My Extension",
+  "version": "1.0.0",
+  "options_page": "src/options.html"
+}
+```
+
+</CodeGroup>
+
+<Tip>
+  All paths in the manifest are relative to your Vite project root (where `vite.config.js` is located). Use paths that start with a letter, not `./` or `/`.
+</Tip>
+
+## Update Vite config
+
+Import and configure the CRXJS plugin in your `vite.config.js` or `vite.config.ts`:
+
+<CodeGroup>
+
+```javascript vite.config.js
+import { defineConfig } from 'vite'
+import { crx } from '@crxjs/vite-plugin'
+import manifest from './manifest.json'
+
+export default defineConfig({
+  plugins: [
+    crx({ manifest }),
+  ],
+})
+```
+
+```javascript With React
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import { crx } from '@crxjs/vite-plugin'
+import manifest from './manifest.json'
+
+export default defineConfig({
+  plugins: [
+    react(),
+    crx({ manifest }),
+  ],
+})
+```
+
+```javascript With Vue
+import { defineConfig } from 'vite'
+import vue from '@vitejs/plugin-vue'
+import { crx } from '@crxjs/vite-plugin'
+import manifest from './manifest.json'
+
+export default defineConfig({
+  plugins: [
+    vue(),
+    crx({ manifest }),
+  ],
+})
+```
+
+```typescript vite.config.ts
+import { defineConfig } from 'vite'
+import { crx } from '@crxjs/vite-plugin'
+import manifest from './manifest.json'
+
+export default defineConfig({
+  plugins: [
+    crx({ manifest }),
+  ],
+})
+```
+
+</CodeGroup>
+
+<Warning>
+  Ensure your `package.json` has `"type": "module"` set. Vite requires this to process your config file.
+</Warning>
+
+## TypeScript manifest (optional)
+
+For better type safety and dynamic configuration, use a TypeScript manifest with the `defineManifest` helper:
+
+<Steps>
+  <Step title="Create a manifest config file">
+    Create `manifest.config.ts` in your project root:
+
+    ```typescript manifest.config.ts
+    import { defineManifest } from '@crxjs/vite-plugin'
+    import packageJson from './package.json'
+
+    export default defineManifest({
+      manifest_version: 3,
+      name: packageJson.name,
+      version: packageJson.version,
+      action: {
+        default_popup: 'index.html',
+      },
+    })
+    ```
+  </Step>
+
+  <Step title="Update your Vite config">
+    Import the TypeScript manifest instead of JSON:
+
+    ```typescript vite.config.ts
+    import { defineConfig } from 'vite'
+    import { crx } from '@crxjs/vite-plugin'
+    import manifest from './manifest.config'
+
+    export default defineConfig({
+      plugins: [
+        crx({ manifest }),
+      ],
+    })
+    ```
+  </Step>
+</Steps>
+
+<Tip>
+  The `defineManifest` helper provides autocompletion and supports async functions for dynamic manifest generation.
+</Tip>
+
+### Dynamic manifest example
+
+You can use environment variables and dynamic logic in your TypeScript manifest:
+
+```typescript manifest.config.ts
+import { defineManifest } from '@crxjs/vite-plugin'
+import packageJson from './package.json'
+
+const { version } = packageJson
+
+// Convert Semver to Chrome extension version format
+const [major, minor, patch] = version.split('.')
+
+export default defineManifest(async (env) => ({
+  manifest_version: 3,
+  name: env.mode === 'production' 
+    ? 'My Extension' 
+    : '[DEV] My Extension',
+  version: `${major}.${minor}.${patch}`,
+  version_name: version,
+  action: {
+    default_popup: 'index.html',
+  },
+}))
+```
+
+## Run the development server
+
+Start Vite's development server:
+
+```bash
+npm run dev
+```
+
+CRXJS will:
+- Parse your manifest
+- Build all entry files (HTML pages, scripts, etc.)
+- Generate the `dist` folder with your extension
+- Watch for changes and rebuild automatically
+
+## Load the extension
+
+<Steps>
+  <Step title="Open Chrome extensions page">
+    Navigate to `chrome://extensions` in Chrome or Edge
+  </Step>
+
+  <Step title="Enable developer mode">
+    Toggle the "Developer mode" switch in the top right (Chrome) or left sidebar (Edge)
+  </Step>
+
+  <Step title="Load your extension">
+    Drag your `dist` folder into the Extensions Dashboard
+
+    Your extension is now installed and ready to use!
+  </Step>
+</Steps>
+
+## Verify installation
+
+Your extension should appear in the extensions list with:
+- The name from your manifest
+- An icon showing the first letter of your extension name (or your custom icon if specified)
+- A toggle to enable/disable it
+
+Click the extension icon in your browser toolbar to test it. If you configured a popup page, it should open and display your Vite-powered UI.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Quick start tutorial"
+    icon="rocket"
+    href="/quickstart"
+  >
+    Follow the 90-second tutorial to experience HMR
+  </Card>
+  <Card
+    title="Manifest concepts"
+    icon="file"
+    href="/concepts/manifest"
+  >
+    Learn more about manifest configuration
+  </Card>
+  <Card
+    title="Add content scripts"
+    icon="code"
+    href="/content-scripts"
+  >
+    Inject scripts into web pages
+  </Card>
+  <Card
+    title="Configuration options"
+    icon="gear"
+    href="/config"
+  >
+    Explore advanced plugin configuration
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+### "type": "module" error
+
+If Vite can't process your config file, ensure your `package.json` includes:
+
+```json package.json
+{
+  "type": "module"
+}
+```
+
+### Manifest paths not resolving
+
+Manifest paths should be relative to your Vite project root and should NOT start with `./` or `/`:
+
+<CodeGroup>
+
+```json Good
+{
+  "action": {
+    "default_popup": "index.html"
+  },
+  "background": {
+    "service_worker": "src/background.js"
+  }
+}
+```
+
+```json Bad
+{
+  "action": {
+    "default_popup": "./index.html"
+  },
+  "background": {
+    "service_worker": "/src/background.js"
+  }
+}
+```
+
+</CodeGroup>
+
+### Extension not loading
+
+If your extension doesn't load in Chrome:
+
+1. Check the browser console for errors
+2. Verify your `dist` folder was generated
+3. Ensure your manifest has at minimum: `manifest_version`, `name`, and `version`
+4. Try removing and re-adding the extension

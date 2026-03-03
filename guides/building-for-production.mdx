@@ -1,0 +1,508 @@
+---
+title: Building for Production
+description: Optimize and build your Chrome extension for production deployment
+---
+
+Building your Chrome extension for production involves optimization, testing, and packaging. This guide covers best practices for creating production-ready builds.
+
+## Production Build
+
+Create a production build:
+
+```bash
+npm run build
+```
+
+This command:
+1. Type-checks your code (if using TypeScript)
+2. Bundles and optimizes all assets
+3. Generates the extension in `dist/` directory
+4. Creates source maps (if configured)
+5. Minifies JavaScript and CSS
+
+## Build Configuration
+
+Configure your production build in `vite.config.ts`:
+
+```ts vite.config.ts
+import path from 'node:path'
+import { crx } from '@crxjs/vite-plugin'
+import { defineConfig } from 'vite'
+import manifest from './manifest.config'
+
+export default defineConfig({
+  plugins: [
+    crx({ manifest }),
+  ],
+  build: {
+    // Output directory
+    outDir: 'dist',
+    
+    // Generate source maps for debugging
+    sourcemap: true,
+    
+    // Minification
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: true, // Remove console.log in production
+        drop_debugger: true,
+      },
+    },
+    
+    // Chunk size warnings
+    chunkSizeWarningLimit: 1000,
+    
+    // Rollup options
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Split vendor code
+          vendor: ['react', 'react-dom'],
+        },
+      },
+    },
+  },
+})
+```
+
+## Manifest Configuration
+
+Configure your manifest for production:
+
+```ts manifest.config.ts
+import { defineManifest } from '@crxjs/vite-plugin'
+import pkg from './package.json'
+
+const isDev = process.env.NODE_ENV === 'development'
+
+export default defineManifest({
+  manifest_version: 3,
+  
+  // Add [DEV] prefix in development
+  name: isDev ? `[DEV] ${pkg.name}` : pkg.name,
+  
+  // Semantic versioning
+  version: pkg.version,
+  
+  description: pkg.description,
+  
+  icons: {
+    16: 'public/icon-16.png',
+    48: 'public/icon-48.png',
+    128: 'public/icon-128.png',
+  },
+  
+  action: {
+    default_popup: 'src/popup/index.html',
+  },
+  
+  background: {
+    service_worker: 'src/background.ts',
+    type: 'module',
+  },
+  
+  // Only include dev permissions in development
+  permissions: [
+    'storage',
+    ...(isDev ? ['tabs'] : []),
+  ],
+  
+  content_scripts: [{
+    js: ['src/content/main.ts'],
+    matches: ['https://*/*'],
+  }],
+})
+```
+
+## Package.json Scripts
+
+Set up comprehensive build scripts:
+
+```json package.json
+{
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "build:watch": "vite build --watch",
+    "type-check": "tsc -b --noEmit",
+    "lint": "eslint src",
+    "preview": "vite preview"
+  }
+}
+```
+
+## Optimization Strategies
+
+### Code Splitting
+
+Split your code into smaller chunks:
+
+```ts vite.config.ts
+export default defineConfig({
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: (id) => {
+          // Vendor chunk
+          if (id.includes('node_modules')) {
+            return 'vendor'
+          }
+          
+          // UI framework chunk
+          if (id.includes('react') || id.includes('vue') || id.includes('svelte')) {
+            return 'framework'
+          }
+          
+          // Components chunk
+          if (id.includes('/components/')) {
+            return 'components'
+          }
+        },
+      },
+    },
+  },
+})
+```
+
+### Tree Shaking
+
+Ensure proper tree shaking:
+
+```ts
+// Good: Named imports enable tree shaking
+import { map, filter } from 'lodash-es'
+
+// Bad: Imports entire library
+import _ from 'lodash'
+```
+
+### Lazy Loading
+
+Load components on demand:
+
+```ts
+// React
+const Settings = lazy(() => import('./components/Settings'))
+
+// Vue
+const Settings = defineAsyncComponent(() => import('./components/Settings.vue'))
+
+// Svelte
+const Settings = () => import('./components/Settings.svelte')
+```
+
+### Asset Optimization
+
+Optimize images and fonts:
+
+```bash
+npm install -D vite-plugin-image-optimizer
+```
+
+```ts vite.config.ts
+import { ViteImageOptimizer } from 'vite-plugin-image-optimizer'
+
+export default defineConfig({
+  plugins: [
+    crx({ manifest }),
+    ViteImageOptimizer({
+      png: { quality: 80 },
+      jpeg: { quality: 80 },
+      webp: { quality: 80 },
+    }),
+  ],
+})
+```
+
+## Source Maps
+
+Configure source maps for debugging:
+
+```ts vite.config.ts
+export default defineConfig({
+  build: {
+    // 'hidden' generates source maps but doesn't reference them
+    // Good for production debugging without exposing source
+    sourcemap: 'hidden',
+    
+    // Alternative options:
+    // sourcemap: true,        // Full source maps
+    // sourcemap: false,       // No source maps
+    // sourcemap: 'inline',    // Inline source maps
+  },
+})
+```
+
+<Note>
+  Chrome Web Store allows source maps. Include them for easier debugging of production issues.
+</Note>
+
+## Packaging
+
+### Create ZIP Archive
+
+Install the zip plugin:
+
+```bash
+npm install -D vite-plugin-zip-pack
+```
+
+```ts vite.config.ts
+import zip from 'vite-plugin-zip-pack'
+import { name, version } from './package.json'
+
+export default defineConfig({
+  plugins: [
+    crx({ manifest }),
+    zip({
+      outDir: 'release',
+      outFileName: `${name}-${version}.zip`,
+    }),
+  ],
+})
+```
+
+After building, find your extension in `release/`.
+
+### Manual Packaging
+
+Or package manually:
+
+```bash
+# Build first
+npm run build
+
+# Create zip
+cd dist
+zip -r ../extension.zip .
+cd ..
+```
+
+## Version Management
+
+Use semantic versioning:
+
+```json package.json
+{
+  "version": "1.2.3",
+  "scripts": {
+    "version:patch": "npm version patch && npm run build",
+    "version:minor": "npm version minor && npm run build",
+    "version:major": "npm version major && npm run build"
+  }
+}
+```
+
+Update version:
+
+```bash
+npm run version:patch  # 1.2.3 -> 1.2.4
+npm run version:minor  # 1.2.4 -> 1.3.0
+npm run version:major  # 1.3.0 -> 2.0.0
+```
+
+## Build Checklist
+
+Before publishing, verify:
+
+- [ ] All TypeScript errors resolved
+- [ ] Linting passes
+- [ ] Tests pass (if applicable)
+- [ ] Console logs removed (or conditional)
+- [ ] Debug features disabled
+- [ ] Environment variables configured
+- [ ] Icons included (16x16, 48x48, 128x128)
+- [ ] Manifest version updated
+- [ ] Permissions minimized
+- [ ] Source maps generated
+- [ ] Build size acceptable (< 20 MB)
+- [ ] Extension tested in browser
+
+## Testing Production Build
+
+Load and test your production build:
+
+1. Build the extension:
+   ```bash
+   npm run build
+   ```
+
+2. Open Chrome and navigate to `chrome://extensions`
+
+3. Enable "Developer mode"
+
+4. Click "Load unpacked"
+
+5. Select the `dist/` directory
+
+6. Test all features thoroughly
+
+## Size Analysis
+
+Analyze bundle size:
+
+```bash
+npm install -D rollup-plugin-visualizer
+```
+
+```ts vite.config.ts
+import { visualizer } from 'rollup-plugin-visualizer'
+
+export default defineConfig({
+  plugins: [
+    crx({ manifest }),
+    visualizer({
+      open: true,
+      gzipSize: true,
+      brotliSize: true,
+    }),
+  ],
+})
+```
+
+After building, opens a visual report of your bundle.
+
+## Chrome Web Store Requirements
+
+### Size Limits
+
+- Maximum upload size: **20 MB**
+- Maximum unpacked size: **100 MB**
+
+### Required Assets
+
+Prepare store assets:
+
+- Small icon: 128x128 PNG
+- Promotional images:
+  - Small: 440x280 PNG
+  - Marquee: 1400x560 PNG (optional)
+- Screenshots: 1280x800 or 640x400 PNG (min 1, max 5)
+- Description (max 132 characters)
+- Detailed description
+- Privacy policy URL (if collecting data)
+
+### Manifest Requirements
+
+```ts manifest.config.ts
+export default defineManifest({
+  manifest_version: 3,
+  name: 'Your Extension Name',
+  version: '1.0.0',
+  description: 'Clear, concise description under 132 characters',
+  icons: {
+    16: 'public/icon-16.png',
+    48: 'public/icon-48.png',
+    128: 'public/icon-128.png',
+  },
+  // ... rest of manifest
+})
+```
+
+## Continuous Integration
+
+Automate builds with GitHub Actions:
+
+```yaml .github/workflows/build.yml
+name: Build Extension
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Type check
+        run: npm run type-check
+        
+      - name: Lint
+        run: npm run lint
+        
+      - name: Build
+        run: npm run build
+        
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: extension
+          path: dist/
+```
+
+## Environment-Specific Builds
+
+Build for different environments:
+
+```json package.json
+{
+  "scripts": {
+    "build": "vite build",
+    "build:staging": "vite build --mode staging",
+    "build:production": "vite build --mode production"
+  }
+}
+```
+
+```bash .env.staging
+VITE_API_URL=https://staging.api.example.com
+```
+
+```bash .env.production
+VITE_API_URL=https://api.example.com
+```
+
+## Publishing
+
+Steps to publish:
+
+1. Create a [Chrome Web Store Developer account](https://chrome.google.com/webstore/devconsole)
+2. Pay one-time $5 registration fee
+3. Build and package your extension
+4. Upload ZIP file to dashboard
+5. Fill in store listing details
+6. Submit for review
+
+Review typically takes 1-3 business days.
+
+## Post-Publication
+
+### Monitoring
+
+Monitor your extension:
+
+- Check Chrome Web Store reviews
+- Monitor error reports
+- Track user count and ratings
+- Review crash reports (if using error tracking)
+
+### Updates
+
+To update:
+
+1. Increment version in `package.json`
+2. Build and test
+3. Upload new ZIP to Chrome Web Store
+4. Submit for review
+
+Users receive updates automatically.
+
+## Next Steps
+
+- [Environment Variables](/guides/environment-variables) - Configure production environment
+- [Static Assets](/guides/static-assets) - Optimize assets for production
+- [TypeScript](/guides/typescript) - Ensure type safety

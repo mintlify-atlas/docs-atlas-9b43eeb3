@@ -1,0 +1,250 @@
+---
+title: Using CRXJS with React
+description: Learn how to build Chrome extensions with React and CRXJS Vite Plugin
+---
+
+CRXJS works seamlessly with React, providing hot module replacement (HMR) and all the modern development features you expect from Vite.
+
+## Installation
+
+Install the required dependencies:
+
+```bash
+npm install react react-dom
+npm install -D @vitejs/plugin-react @types/react @types/react-dom
+```
+
+## Vite Configuration
+
+Configure Vite to use both the React and CRXJS plugins:
+
+```ts vite.config.ts
+import path from 'node:path'
+import { crx } from '@crxjs/vite-plugin'
+import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite'
+import manifest from './manifest.config'
+
+export default defineConfig({
+  resolve: {
+    alias: {
+      '@': `${path.resolve(__dirname, 'src')}`,
+    },
+  },
+  plugins: [
+    react(),
+    crx({ manifest }),
+  ],
+  server: {
+    cors: {
+      origin: [
+        /chrome-extension:\/\//,
+      ],
+    },
+  },
+})
+```
+
+<Note>
+  The `react()` plugin must be placed **before** `crx()` in the plugins array.
+</Note>
+
+## TypeScript Configuration
+
+Set up TypeScript for React with proper types:
+
+```json tsconfig.app.json
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "jsx": "react-jsx",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    },
+    "types": ["vite/client", "chrome"],
+    "strict": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "skipLibCheck": true
+  },
+  "include": ["src"]
+}
+```
+
+## Popup Page with React
+
+Create a React popup component:
+
+```tsx src/popup/main.tsx
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import App from './App.tsx'
+import './index.css'
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+)
+```
+
+```tsx src/popup/App.tsx
+import crxLogo from '@/assets/crx.svg'
+import reactLogo from '@/assets/react.svg'
+import viteLogo from '@/assets/vite.svg'
+import HelloWorld from '@/components/HelloWorld'
+import './App.css'
+
+export default function App() {
+  return (
+    <div>
+      <a href="https://vite.dev" target="_blank" rel="noreferrer">
+        <img src={viteLogo} className="logo" alt="Vite logo" />
+      </a>
+      <a href="https://reactjs.org/" target="_blank" rel="noreferrer">
+        <img src={reactLogo} className="logo react" alt="React logo" />
+      </a>
+      <a href="https://crxjs.dev/vite-plugin" target="_blank" rel="noreferrer">
+        <img src={crxLogo} className="logo crx" alt="crx logo" />
+      </a>
+      <HelloWorld msg="Vite + React + CRXJS" />
+    </div>
+  )
+}
+```
+
+## Content Script with React
+
+Inject React into a webpage using a content script:
+
+```tsx src/content/main.tsx
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import App from './views/App.tsx'
+
+console.log('[CRXJS] Hello world from content script!')
+
+const container = document.createElement('div')
+container.id = 'crxjs-app'
+document.body.appendChild(container)
+createRoot(container).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+)
+```
+
+Update your manifest to include the content script:
+
+```ts manifest.config.ts
+import { defineManifest } from '@crxjs/vite-plugin'
+
+export default defineManifest({
+  manifest_version: 3,
+  name: 'My React Extension',
+  version: '1.0.0',
+  action: {
+    default_popup: 'src/popup/index.html',
+  },
+  content_scripts: [{
+    js: ['src/content/main.tsx'],
+    matches: ['https://*/*'],
+  }],
+})
+```
+
+## Hot Module Replacement
+
+CRXJS provides full HMR support for React:
+
+- Component changes update instantly without losing state
+- CSS changes apply immediately
+- Manifest changes automatically reload the extension
+
+<Tip>
+  React Fast Refresh works out of the box with CRXJS. Make changes to your components and see them update in real-time.
+</Tip>
+
+## Best Practices
+
+### Use React DevTools
+
+Install the React DevTools extension to inspect your components. Both extensions can run simultaneously.
+
+### Code Splitting
+
+Leverage React.lazy() for code splitting:
+
+```tsx
+import { lazy, Suspense } from 'react'
+
+const Settings = lazy(() => import('./components/Settings'))
+
+function App() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <Settings />
+    </Suspense>
+  )
+}
+```
+
+### State Management
+
+Use Chrome's storage APIs with React hooks:
+
+```tsx
+import { useEffect, useState } from 'react'
+
+function useStorage(key: string, defaultValue: any) {
+  const [value, setValue] = useState(defaultValue)
+
+  useEffect(() => {
+    chrome.storage.sync.get([key], (result) => {
+      setValue(result[key] ?? defaultValue)
+    })
+  }, [key])
+
+  const updateValue = (newValue: any) => {
+    chrome.storage.sync.set({ [key]: newValue })
+    setValue(newValue)
+  }
+
+  return [value, updateValue]
+}
+```
+
+## Package.json Scripts
+
+```json package.json
+{
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@crxjs/vite-plugin": "latest",
+    "@types/chrome": "^0.0.313",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "typescript": "~5.7.0",
+    "vite": "^6.0.0"
+  }
+}
+```
+
+## Next Steps
+
+- [Static Assets](/guides/static-assets) - Import images and other assets
+- [TypeScript](/guides/typescript) - Advanced TypeScript configuration
+- [Building for Production](/guides/building-for-production) - Optimize your build

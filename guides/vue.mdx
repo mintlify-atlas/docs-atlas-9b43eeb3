@@ -1,0 +1,285 @@
+---
+title: Using CRXJS with Vue
+description: Learn how to build Chrome extensions with Vue 3 and CRXJS Vite Plugin
+---
+
+CRXJS works seamlessly with Vue 3, providing hot module replacement (HMR) and all the modern development features you expect from Vite.
+
+## Installation
+
+Install the required dependencies:
+
+```bash
+npm install vue
+npm install -D @vitejs/plugin-vue vue-tsc
+```
+
+## Vite Configuration
+
+Configure Vite to use both the Vue and CRXJS plugins:
+
+```ts vite.config.ts
+import path from 'node:path'
+import { crx } from '@crxjs/vite-plugin'
+import vue from '@vitejs/plugin-vue'
+import { defineConfig } from 'vite'
+import manifest from './manifest.config'
+
+export default defineConfig({
+  resolve: {
+    alias: {
+      '@': `${path.resolve(__dirname, 'src')}`,
+    },
+  },
+  plugins: [
+    vue(),
+    crx({ manifest }),
+  ],
+  server: {
+    cors: {
+      origin: [
+        /chrome-extension:\/\//,
+      ],
+    },
+  },
+})
+```
+
+<Note>
+  The `vue()` plugin must be placed **before** `crx()` in the plugins array.
+</Note>
+
+## TypeScript Configuration
+
+Set up TypeScript for Vue with proper types:
+
+```json tsconfig.app.json
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    },
+    "types": ["vite/client", "chrome"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": ["src"]
+}
+```
+
+## Popup Page with Vue
+
+Create a Vue popup component:
+
+```ts src/popup/main.ts
+import { createApp } from 'vue'
+import App from './App.vue'
+import './style.css'
+
+createApp(App).mount('#app')
+```
+
+```vue src/popup/App.vue
+<script setup lang="ts">
+import HelloWorld from '@/components/HelloWorld.vue'
+</script>
+
+<template>
+  <div>
+    <a href="https://vite.dev" target="_blank">
+      <img src="@/assets/vite.svg" class="logo" alt="Vite logo">
+    </a>
+    <a href="https://vuejs.org/" target="_blank">
+      <img src="@/assets/vue.svg" class="logo vue" alt="Vue logo">
+    </a>
+    <a href="https://crxjs.dev/vite-plugin" target="_blank">
+      <img src="@/assets/crx.svg" class="logo crx" alt="crx logo">
+    </a>
+  </div>
+  <HelloWorld msg="Vite + Vue + CRXJS" />
+</template>
+
+<style scoped>
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+.logo:hover {
+  filter: drop-shadow(0 0 2em #646cffaa);
+}
+.logo.vue:hover {
+  filter: drop-shadow(0 0 2em #42b883aa);
+}
+.logo.crx:hover {
+  filter: drop-shadow(0 0 2em #f2bae4aa);
+}
+</style>
+```
+
+## Content Script with Vue
+
+Inject Vue into a webpage using a content script:
+
+```ts src/content/main.ts
+import { createApp } from 'vue'
+import App from './views/App.vue'
+import './style.css'
+
+console.log('[CRXJS] Hello world from content script!')
+
+const container = document.createElement('div')
+container.id = 'crxjs-app'
+document.body.appendChild(container)
+
+createApp(App).mount(container)
+```
+
+Update your manifest to include the content script:
+
+```ts manifest.config.ts
+import { defineManifest } from '@crxjs/vite-plugin'
+
+export default defineManifest({
+  manifest_version: 3,
+  name: 'My Vue Extension',
+  version: '1.0.0',
+  action: {
+    default_popup: 'src/popup/index.html',
+  },
+  content_scripts: [{
+    js: ['src/content/main.ts'],
+    matches: ['https://*/*'],
+  }],
+})
+```
+
+## Hot Module Replacement
+
+CRXJS provides full HMR support for Vue:
+
+- Component changes update instantly without losing state
+- Template changes apply immediately
+- CSS changes apply immediately
+- Manifest changes automatically reload the extension
+
+<Tip>
+  Vue HMR works out of the box with CRXJS. Make changes to your components and see them update in real-time.
+</Tip>
+
+## Composition API
+
+Use the Composition API with Chrome APIs:
+
+```vue
+<script setup lang="ts">
+import { ref, onMounted } from 'vue'
+
+const tabs = ref<chrome.tabs.Tab[]>([])
+
+onMounted(async () => {
+  tabs.value = await chrome.tabs.query({ currentWindow: true })
+})
+
+const closeTab = async (tabId: number) => {
+  await chrome.tabs.remove(tabId)
+  tabs.value = tabs.value.filter(tab => tab.id !== tabId)
+}
+</script>
+
+<template>
+  <div>
+    <h2>Open Tabs</h2>
+    <ul>
+      <li v-for="tab in tabs" :key="tab.id">
+        {{ tab.title }}
+        <button @click="closeTab(tab.id!)">Close</button>
+      </li>
+    </ul>
+  </div>
+</template>
+```
+
+## Vue DevTools
+
+The Vue DevTools browser extension works with CRXJS extensions. Both extensions can run simultaneously, allowing you to inspect your components, state, and events.
+
+## Composables for Chrome APIs
+
+Create reusable composables for Chrome storage:
+
+```ts composables/useStorage.ts
+import { ref, watch } from 'vue'
+
+export function useStorage<T>(key: string, defaultValue: T) {
+  const value = ref<T>(defaultValue)
+  const loading = ref(true)
+
+  // Load initial value
+  chrome.storage.sync.get([key], (result) => {
+    value.value = result[key] ?? defaultValue
+    loading.value = false
+  })
+
+  // Watch for changes
+  watch(value, (newValue) => {
+    chrome.storage.sync.set({ [key]: newValue })
+  })
+
+  return { value, loading }
+}
+```
+
+Use it in your components:
+
+```vue
+<script setup lang="ts">
+import { useStorage } from '@/composables/useStorage'
+
+const { value: theme, loading } = useStorage('theme', 'light')
+</script>
+
+<template>
+  <div v-if="!loading">
+    <button @click="theme = theme === 'light' ? 'dark' : 'light'">
+      Switch to {{ theme === 'light' ? 'dark' : 'light' }} mode
+    </button>
+  </div>
+</template>
+```
+
+## Package.json Scripts
+
+```json package.json
+{
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "vue": "^3.5.0"
+  },
+  "devDependencies": {
+    "@crxjs/vite-plugin": "latest",
+    "@types/chrome": "^0.0.313",
+    "@vitejs/plugin-vue": "^5.0.0",
+    "typescript": "~5.7.0",
+    "vite": "^6.0.0",
+    "vue-tsc": "^2.0.0"
+  }
+}
+```
+
+## Next Steps
+
+- [Static Assets](/guides/static-assets) - Import images and other assets
+- [TypeScript](/guides/typescript) - Advanced TypeScript configuration
+- [Building for Production](/guides/building-for-production) - Optimize your build

@@ -1,0 +1,290 @@
+---
+title: 'Content Scripts'
+description: 'How CRXJS provides HMR for content scripts with framework support'
+---
+
+## Overview
+
+CRXJS provides content scripts with Vite HMR, so updates don't always require a full page reload. Frameworks like React and Vue work in content scripts the same as in HTML pages.
+
+<Info>
+The **host page** of a content script is the website where the content script runs.
+</Info>
+
+## Basic Content Script
+
+Declare content scripts in your manifest:
+
+```json manifest.json
+{
+  "content_scripts": [
+    {
+      "matches": ["https://*.example.com/*"],
+      "js": ["src/content.ts"],
+      "css": ["src/content.css"]
+    }
+  ]
+}
+```
+
+CRXJS automatically:
+- Bundles your content script with dependencies
+- Injects the HMR client for hot updates
+- Handles CSS imports and static assets
+
+## Content Script Loaders
+
+CRXJS generates **loader files** for content scripts to enable HMR and proper module loading.
+
+### Development Loaders
+
+During development, loaders import from the Vite dev server:
+
+```javascript
+// Loader imports preamble (for React Fast Refresh)
+import '/preamble.js'
+// Loader imports Vite client
+import '/vite-client.js'
+// Loader imports your content script
+import '/src/content.ts'
+```
+
+### Production Loaders
+
+In production, loaders import the bundled script:
+
+```javascript
+import './content-[hash].js'
+```
+
+From the source code (plugin-contentScripts.ts:198):
+
+```typescript
+const shouldUseLoader = !(
+  bundleFileInfo.type === 'chunk' &&
+  bundleFileInfo.imports.length === 0 &&
+  bundleFileInfo.dynamicImports.length === 0 &&
+  bundleFileInfo.exports.length === 0
+)
+```
+
+If your content script has no imports, exports, or dynamic imports, CRXJS skips the loader and injects the code directly.
+
+## Static Assets
+
+Import static assets freely - CRXJS automatically declares them as `web_accessible_resources`:
+
+```typescript src/content.ts
+import logo from './logo.png'
+import styles from './content.css?inline'
+
+const img = document.createElement('img')
+img.src = chrome.runtime.getURL(logo)
+document.body.appendChild(img)
+```
+
+<Warning>
+Content scripts share the origin of the host page. Use `chrome.runtime.getURL()` to convert asset imports to extension URLs.
+</Warning>
+
+## CSS Handling
+
+CRXJS handles content script CSS specially:
+
+### Declared CSS
+
+```json manifest.json
+{
+  "content_scripts": [{
+    "css": ["src/content.css"]
+  }]
+}
+```
+
+CRXJS creates a synthetic entry point for CSS files and injects them before your JS scripts.
+
+### Imported CSS
+
+```typescript src/content.ts
+import './content.css'
+```
+
+Vite bundles imported CSS with your script.
+
+## Framework Support
+
+### React Content Scripts
+
+```typescript src/content.tsx
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import { App } from './App'
+
+const root = document.createElement('div')
+root.id = 'crx-root'
+document.body.appendChild(root)
+
+ReactDOM.createRoot(root).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+)
+```
+
+React Fast Refresh works automatically. CRXJS detects React and injects the preamble code.
+
+From the source code (plugin-contentScripts.ts:88):
+
+```typescript
+if (
+  typeof preambleCode === 'undefined' &&
+  server.config.plugins.some(
+    ({ name = 'none' }) =>
+      name.toLowerCase().includes('react') &&
+      !name.toLowerCase().includes('preact'),
+  )
+) {
+  const react = await import('@vitejs/plugin-react')
+  preambleCode = react.default.preambleCode
+}
+```
+
+### Vue Content Scripts
+
+```typescript src/content.ts
+import { createApp } from 'vue'
+import App from './App.vue'
+
+const root = document.createElement('div')
+root.id = 'crx-root'
+document.body.appendChild(root)
+
+createApp(App).mount(root)
+```
+
+Vue HMR works out of the box.
+
+## HTML in Content Scripts
+
+You can inject extension pages into host pages using iframes:
+
+```typescript src/content.ts
+const src = chrome.runtime.getURL('pages/iframe.html')
+
+const iframe = new DOMParser().parseFromString(
+  `<iframe class="crx" src="${src}"></iframe>`,
+  'text/html',
+).body.firstElementChild
+
+document.body.append(iframe)
+```
+
+The injected page loads in a cross-origin iframe with full Chrome API access.
+
+<Note>
+You must declare the HTML file as a web-accessible resource and add it to your Vite config inputs. See [Web Accessible Resources](/concepts/web-accessible-resources).
+</Note>
+
+### Imported HTML Fragments
+
+For simple HTML without frameworks, import HTML as text:
+
+```typescript src/content.ts
+import html from './root.html?raw'
+
+const element = new DOMParser().parseFromString(html, 'text/html').body.firstElementChild
+document.body.append(element)
+```
+
+This doesn't require web-accessible resources or Vite config changes.
+
+## Main World Content Scripts
+
+Content scripts can run in the MAIN world (the page's JavaScript context):
+
+```json manifest.json
+{
+  "content_scripts": [{
+    "js": ["src/main-world.ts"],
+    "matches": ["https://*.example.com/*"],
+    "world": "MAIN"
+  }]
+}
+```
+
+<Warning>
+MAIN world content scripts don't support HMR because they run in the page context, not the extension context.
+</Warning>
+
+From the source code (plugin-contentScripts.ts:55):
+
+```typescript
+if (worldMainIds.size) {
+  const message = colors.yellow(
+    `Some content-scripts don't support HMR because the world is MAIN`
+  )
+  console.log(message)
+}
+```
+
+## Hot Module Replacement
+
+CRXJS tracks content script dependencies and triggers HMR when they change:
+
+From the source code (plugin-hmr.ts:159):
+
+```typescript
+if (
+  relFiles.has(script.id) ||
+  modules.some(isImporter(join(server.config.root, script.id)))
+) {
+  relFiles.forEach((relFile) => update(relFile))
+}
+```
+
+Content script HMR:
+- Updates code without reloading the page
+- Preserves component state (React/Vue)
+- Applies CSS changes instantly
+
+<Tip>
+Learn more in the [HMR documentation](/concepts/hmr).
+</Tip>
+
+## HMR Timeout Configuration
+
+Configure the HMR timeout for content scripts:
+
+```typescript vite.config.ts
+export default defineConfig({
+  plugins: [
+    crx({
+      manifest,
+      contentScripts: {
+        hmrTimeout: 10000, // 10 seconds (default: 5000)
+      },
+    }),
+  ],
+})
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Web Accessible Resources" icon="globe" href="/concepts/web-accessible-resources">
+    Expose assets to content scripts
+  </Card>
+  
+  <Card title="HMR" icon="bolt" href="/concepts/hmr">
+    Hot Module Replacement details
+  </Card>
+  
+  <Card title="Background Scripts" icon="server" href="/concepts/background">
+    Communicate with service workers
+  </Card>
+</CardGroup>
+
+## Learn More
+
+- [Chrome Content Scripts](https://developer.chrome.com/docs/extensions/mv3/content_scripts/)
+- [Content Script Execution Worlds](https://developer.chrome.com/docs/extensions/mv3/content_scripts/#world)

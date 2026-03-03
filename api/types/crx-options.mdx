@@ -1,0 +1,226 @@
+---
+title: "CrxOptions"
+description: "Configuration options for the CRXJS Vite Plugin"
+---
+
+The `CrxOptions` interface defines configuration options for customizing the behavior of the CRXJS Vite Plugin.
+
+## Import
+
+```typescript
+import type { CrxOptions } from '@crxjs/vite-plugin'
+import { crx } from '@crxjs/vite-plugin'
+import manifest from './manifest.json'
+
+const options: CrxOptions = {
+  browser: 'chrome',
+  contentScripts: {
+    hmrTimeout: 5000
+  }
+}
+
+export default defineConfig({
+  plugins: [crx({ manifest, ...options })]
+})
+```
+
+## Options
+
+<ResponseField name="browser" type="Browser">
+  Target browser for the extension. Can be `"chrome"` or `"firefox"`. Default is `"chrome"`.
+  
+  This affects how the manifest is processed and which browser-specific features are enabled.
+  
+  ```typescript
+  type Browser = 'firefox' | 'chrome'
+  ```
+</ResponseField>
+
+<ResponseField name="contentScripts" type="ContentScriptsOptions">
+  Configuration options for content script behavior during development.
+</ResponseField>
+
+<ResponseField name="fastGlobOptions" type="FastGlobOptions">
+  Options passed to [fast-glob](https://github.com/mrmlnc/fast-glob) when resolving file patterns in the manifest.
+  
+  Useful for customizing how files are matched (e.g., ignore patterns, follow symlinks, etc.).
+</ResponseField>
+
+## ContentScriptsOptions
+
+<ResponseField name="contentScripts.preambleCode" type="string | false">
+  Custom code to inject at the beginning of every content script during development.
+  
+  Set to `false` to disable the default preamble code that CRXJS injects for HMR support.
+  
+  ```typescript
+  {
+    contentScripts: {
+      preambleCode: 'console.log("Content script loaded");'
+    }
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="contentScripts.hmrTimeout" type="number">
+  Timeout in milliseconds for HMR (Hot Module Replacement) connections in content scripts.
+  
+  Default is `3000` (3 seconds). Increase this if you experience HMR connection timeouts.
+  
+  ```typescript
+  {
+    contentScripts: {
+      hmrTimeout: 5000  // 5 seconds
+    }
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="contentScripts.injectCss" type="boolean">
+  Whether to automatically inject CSS imports into content scripts.
+  
+  When `true`, CSS imported in content scripts will be injected into the page. When `false`, CSS must be manually injected.
+  
+  Default behavior is determined by the plugin.
+</ResponseField>
+
+## Examples
+
+### Basic Configuration
+
+```typescript
+import { defineConfig } from 'vite'
+import { crx } from '@crxjs/vite-plugin'
+import manifest from './manifest.json'
+
+export default defineConfig({
+  plugins: [
+    crx({ 
+      manifest,
+      browser: 'chrome'
+    })
+  ]
+})
+```
+
+### Firefox Extension
+
+```typescript
+import { defineConfig } from 'vite'
+import { crx } from '@crxjs/vite-plugin'
+import manifest from './manifest.json'
+
+export default defineConfig({
+  plugins: [
+    crx({ 
+      manifest,
+      browser: 'firefox'
+    })
+  ]
+})
+```
+
+### Custom Content Script Configuration
+
+```typescript
+import { defineConfig } from 'vite'
+import { crx } from '@crxjs/vite-plugin'
+import manifest from './manifest.json'
+
+export default defineConfig({
+  plugins: [
+    crx({ 
+      manifest,
+      contentScripts: {
+        // Increase HMR timeout for slower networks
+        hmrTimeout: 10000,
+        
+        // Add custom initialization code
+        preambleCode: `
+          console.log('[CRX] Content script initializing...');
+          window.__CRX_DEV__ = true;
+        `,
+        
+        // Enable CSS injection
+        injectCss: true
+      }
+    })
+  ]
+})
+```
+
+### Custom File Globbing
+
+```typescript
+import { defineConfig } from 'vite'
+import { crx } from '@crxjs/vite-plugin'
+import manifest from './manifest.json'
+
+export default defineConfig({
+  plugins: [
+    crx({ 
+      manifest,
+      fastGlobOptions: {
+        // Follow symbolic links
+        followSymbolicLinks: true,
+        
+        // Ignore patterns
+        ignore: ['**/node_modules/**', '**/.git/**'],
+        
+        // Case-insensitive matching
+        caseSensitiveMatch: false
+      }
+    })
+  ]
+})
+```
+
+### Disable Content Script Preamble
+
+```typescript
+import { defineConfig } from 'vite'
+import { crx } from '@crxjs/vite-plugin'
+import manifest from './manifest.json'
+
+export default defineConfig({
+  plugins: [
+    crx({ 
+      manifest,
+      contentScripts: {
+        // Disable the default preamble code
+        preambleCode: false
+      }
+    })
+  ]
+})
+```
+
+## Type Definitions
+
+```typescript
+export interface CrxOptions {
+  contentScripts?: {
+    preambleCode?: string | false
+    hmrTimeout?: number
+    injectCss?: boolean
+  }
+  fastGlobOptions?: FastGlobOptions
+  browser?: Browser
+}
+
+export type Browser = 'firefox' | 'chrome'
+```
+
+## Notes
+
+<Note>
+  The `browser` option only affects plugin behavior. You still need to ensure your manifest and code are compatible with the target browser.
+</Note>
+
+<Warning>
+  Setting `preambleCode` to `false` will disable HMR functionality in content scripts during development.
+</Warning>
+
+<Tip>
+  If you're experiencing HMR connection issues in content scripts, try increasing the `hmrTimeout` value.
+</Tip>

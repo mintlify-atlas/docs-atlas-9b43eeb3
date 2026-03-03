@@ -1,0 +1,58 @@
+---
+title: "chromeExtension()"
+description: "Alias for the crx() function"
+---
+
+The `chromeExtension()` function is an alias for [`crx()`](/api/crx). It provides the same functionality with a more descriptive name that clearly indicates its purpose for Chrome Extension development.
+
+## Signature
+
+```typescript
+function chromeExtension(options: {
+  manifest: ManifestV3Export
+} & CrxOptions): PluginOption[]
+```
+
+## Usage
+
+You can use `chromeExtension()` and `crx()` interchangeably:
+
+```typescript vite.config.ts
+import { defineConfig } from 'vite'
+import { chromeExtension } from '@crxjs/vite-plugin'
+import manifest from './manifest.json'
+
+export default defineConfig({
+  plugins: [chromeExtension({ manifest })],
+})
+```
+
+## Why Two Names?
+
+The plugin was originally named `crx()` for brevity. The `chromeExtension()` alias was added to provide a more descriptive alternative that makes the plugin's purpose immediately clear, especially for developers new to the ecosystem.
+
+Choose whichever name you prefer:
+
+<CodeGroup>
+
+```typescript crx()
+import { crx } from '@crxjs/vite-plugin'
+
+export default defineConfig({
+  plugins: [crx({ manifest })],
+})
+```
+
+```typescript chromeExtension()
+import { chromeExtension } from '@crxjs/vite-plugin'
+
+export default defineConfig({
+  plugins: [chromeExtension({ manifest })],
+})
+```
+
+</CodeGroup>
+
+## See Also
+
+- [crx()](/api/crx) - The main plugin function documentation

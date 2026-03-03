@@ -1,0 +1,339 @@
+---
+title: 'Hot Module Replacement'
+description: 'How CRXJS provides HMR for Chrome extensions during development'
+---
+
+## Overview
+
+CRXJS brings Vite's Hot Module Replacement (HMR) to Chrome extensions, enabling instant updates during development without manual extension reloads in most cases.
+
+## How HMR Works
+
+CRXJS intercepts Vite's HMR events and applies updates to different parts of your extension:
+
+- **Extension pages** (popup, options, devtools): Full HMR with framework support
+- **Content scripts**: HMR without page reload
+- **Background scripts**: Full extension reload
+
+## Extension Pages HMR
+
+Extension HTML pages (popup, options, devtools) support full HMR:
+
+```typescript popup.tsx
+import { useState } from 'react'
+
+export function Popup() {
+  const [count, setCount] = useState(0)
+  
+  return (
+    <button onClick={() => setCount(count + 1)}>
+      Count: {count}
+    </button>
+  )
+}
+// Edit this component - state is preserved!
+```
+
+**What updates instantly:**
+- React/Vue component changes (with state preservation)
+- CSS modifications
+- TypeScript/JavaScript edits
+- Asset imports
+
+## Content Script HMR
+
+Content scripts receive HMR updates through a special port connection to the Vite dev server:
+
+From the source code (plugin-hmr.ts:60):
+
+```typescript
+decoatedSend = (payload: HMRPayload) => {
+  if (payload.type === 'error') {
+    send({
+      type: 'custom',
+      event: 'crx:content-script-payload',
+      data: payload,
+    })
+  } else {
+    hmrPayload$.next(payload) // sniff hmr events
+  }
+  send(payload) // don't interfere with normal hmr
+}
+```
+
+### Content Script Updates
+
+CRXJS tracks content script dependencies and applies updates:
+
+From the source code (plugin-hmr.ts:159):
+
+```typescript
+for (const [key, script] of contentScripts)
+  if (key === script.id) {
+    if (
+      relFiles.has(script.id) ||
+      modules.some(isImporter(join(server.config.root, script.id)))
+    ) {
+      relFiles.forEach((relFile) => update(relFile))
+    }
+  }
+```
+
+**What updates without reload:**
+- Content script code changes
+- Imported module updates
+- CSS modifications
+- Framework component updates
+
+### HMR Timeout
+
+Content scripts have an HMR timeout to prevent stale connections:
+
+```typescript vite.config.ts
+export default defineConfig({
+  plugins: [
+    crx({
+      manifest,
+      contentScripts: {
+        hmrTimeout: 10000, // 10 seconds (default: 5000)
+      },
+    }),
+  ],
+})
+```
+
+If the content script can't connect to the HMR server within the timeout, it falls back to manual reload.
+
+## Background Script Reloads
+
+Changes to background scripts trigger a **full extension reload** because service workers control the entire extension:
+
+From the source code (plugin-hmr.ts:122):
+
+```typescript
+if (inputManifestFiles.background.length) {
+  const background = prefix('/', inputManifestFiles.background[0])
+  if (
+    relFiles.has(background) ||
+    modules.some(isImporter(join(server.config.root, background)))
+  ) {
+    server.ws.send(crxRuntimeReload)
+  }
+}
+```
+
+<Warning>
+Background script changes require a full extension reload. Save your work in other scripts before editing the background!
+</Warning>
+
+## HMR Client Injection
+
+CRXJS injects HMR clients into your extension:
+
+### Service Worker Client
+
+The background script loads an HMR client that connects to the Vite dev server:
+
+```javascript
+import 'http://localhost:5173/@vite/env'
+import 'http://localhost:5173/worker-hmr-client.js'
+import 'http://localhost:5173/src/background.ts'
+```
+
+### Content Script Client
+
+Content scripts load the Vite client for HMR:
+
+```javascript
+import '/preamble.js' // React Fast Refresh
+import '/vite-client.js' // Vite HMR client
+import '/src/content.ts' // Your content script
+```
+
+## Dev Server Configuration
+
+CRXJS configures the Vite dev server for extension HMR:
+
+From the source code (plugin-hmr.ts:35):
+
+```typescript
+async config({ server = {}, ...config }) {
+  if (server.hmr === false) return
+  server.hmr = server.hmr ?? {}
+  server.hmr.host = 'localhost' // Extensions require localhost
+  return { server, ...config }
+}
+```
+
+<Info>
+The HMR host must be `localhost` for Chrome extensions. CRXJS sets this automatically.
+</Info>
+
+## Watch Mode
+
+CRXJS configures Vite to ignore the output directory to prevent infinite rebuild loops:
+
+From the source code (plugin-hmr.ts:51):
+
+```typescript
+const outDir = isAbsolute(config.build.outDir)
+  ? config.build.outDir
+  : join(config.root, config.build.outDir, '**/*')
+if (!watch.ignored.includes(outDir)) watch.ignored.push(outDir)
+```
+
+## Virtual Module HMR
+
+CRXJS supports HMR for virtual modules (like UnoCSS, TailwindCSS):
+
+From the source code (plugin-hmr.ts:107):
+
+```typescript
+if (
+  m.id?.startsWith('\0') ||
+  m.url?.startsWith('/@id/__x00__')
+) {
+  const virtualId = m.url ?? m.id
+  if (virtualId) {
+    virtualModules.add(virtualId)
+    debug('virtual module detected:', virtualId)
+  }
+}
+```
+
+## HMR for Frameworks
+
+### React Fast Refresh
+
+CRXJS automatically configures React Fast Refresh for content scripts:
+
+From the source code (plugin-contentScripts.ts:88):
+
+```typescript
+if (
+  server.config.plugins.some(
+    ({ name = 'none' }) =>
+      name.toLowerCase().includes('react') &&
+      !name.toLowerCase().includes('preact'),
+  )
+) {
+  const react = await import('@vitejs/plugin-react')
+  preambleCode = react.default.preambleCode
+}
+```
+
+Component state is preserved across updates.
+
+### Vue HMR
+
+Vue components support full HMR out of the box. The `@vitejs/plugin-vue` handles updates automatically.
+
+## HMR Events
+
+CRXJS sends custom HMR events:
+
+```typescript
+export const crxRuntimeReload: CrxHMRPayload = {
+  type: 'custom',
+  event: 'crx:runtime-reload',
+}
+```
+
+You can listen for these events in your extension code:
+
+```typescript
+if (import.meta.hot) {
+  import.meta.hot.on('crx:runtime-reload', () => {
+    console.log('Extension reloading...')
+  })
+}
+```
+
+## CSS HMR
+
+CSS changes apply instantly without page reloads:
+
+```css
+/* Edit this file - changes apply immediately */
+.button {
+  background: blue; /* Change to red - updates instantly! */
+}
+```
+
+CRXJS handles CSS HMR for:
+- Imported CSS in content scripts
+- CSS declared in manifest `content_scripts.css`
+- CSS in extension pages
+
+## Debugging HMR
+
+Enable HMR debug logs:
+
+```bash
+DEBUG=crx:hmr npm run dev
+```
+
+This shows HMR events and reload triggers.
+
+## HMR Limitations
+
+<Warning>
+Some changes require full reloads:
+- Background script modifications
+- Manifest changes
+- New file additions
+- Permission changes
+</Warning>
+
+### MAIN World Content Scripts
+
+Content scripts running in the MAIN world don't support HMR:
+
+```json manifest.json
+{
+  "content_scripts": [{
+    "world": "MAIN", // No HMR support
+    "js": ["src/main-world.ts"]
+  }]
+}
+```
+
+These require page reloads for updates.
+
+## Manual Reload
+
+To manually reload the extension during development:
+
+```typescript
+// In any extension context
+chrome.runtime.reload()
+```
+
+## HMR Best Practices
+
+1. **Separate background logic** - Keep background scripts minimal to reduce reload frequency
+2. **Use React/Vue** - Framework HMR is more reliable than vanilla JS
+3. **Test without HMR** - Occasionally test with `npm run build` to catch HMR-specific issues
+4. **Save before background edits** - Background changes trigger full reloads
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Content Scripts" icon="file-code" href="/concepts/content-scripts">
+    Content script HMR details
+  </Card>
+  
+  <Card title="Background Scripts" icon="server" href="/concepts/background">
+    Why background changes reload
+  </Card>
+  
+  <Card title="Pages" icon="browser" href="/concepts/pages">
+    Extension page HMR
+  </Card>
+</CardGroup>
+
+## Learn More
+
+- [Vite HMR API](https://vitejs.dev/guide/api-hmr.html)
+- [React Fast Refresh](https://www.npmjs.com/package/react-refresh)
+- [Vue HMR](https://vitejs.dev/guide/api-hmr.html#hmr-api)

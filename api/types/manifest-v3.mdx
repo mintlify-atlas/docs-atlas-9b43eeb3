@@ -1,0 +1,388 @@
+---
+title: "ManifestV3"
+description: "TypeScript interface for Chrome Extension Manifest V3"
+---
+
+The `ManifestV3` interface provides comprehensive TypeScript typings for Chrome Extension Manifest Version 3, including support for both Chrome and Firefox-specific features.
+
+## Import
+
+```typescript
+import type { ManifestV3 } from '@crxjs/vite-plugin'
+```
+
+## Required Fields
+
+<ResponseField name="manifest_version" type="number" required>
+  Must be `3` for Manifest V3 extensions
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  The name of your extension (45 characters max recommended)
+</ResponseField>
+
+<ResponseField name="version" type="string" required>
+  Version string with 1-4 dot-separated integers (e.g., `"1.0.0"`)
+</ResponseField>
+
+## Recommended Fields
+
+<ResponseField name="description" type="string">
+  A plain text description of the extension (132 characters max recommended)
+</ResponseField>
+
+<ResponseField name="icons" type="chrome.runtime.ManifestIcons">
+  Icon files for your extension in various sizes
+  
+  ```json
+  {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="default_locale" type="string">
+  Locale for `_locales` directory (e.g., `"en"`)
+</ResponseField>
+
+## Background Scripts
+
+<ResponseField name="background" type="ChromeManifestBackground | FirefoxManifestBackground">
+  Background service worker configuration
+</ResponseField>
+
+### Chrome Background (Service Worker)
+
+```typescript
+interface ChromeManifestBackground {
+  service_worker: string
+  type?: 'module' | string  // Use 'module' for ES modules
+}
+```
+
+```json
+{
+  "background": {
+    "service_worker": "src/background.ts",
+    "type": "module"
+  }
+}
+```
+
+### Firefox Background (Scripts)
+
+```typescript
+interface FirefoxManifestBackground {
+  scripts: string[]
+  persistent?: false
+}
+```
+
+```json
+{
+  "background": {
+    "scripts": ["src/background.ts"],
+    "persistent": false
+  }
+}
+```
+
+## Content Scripts
+
+<ResponseField name="content_scripts" type="ContentScript[]">
+  Array of content script configurations
+</ResponseField>
+
+```typescript
+interface ContentScript {
+  matches?: string[]              // URL patterns
+  exclude_matches?: string[]      // Excluded URL patterns
+  css?: string[]                  // CSS files to inject
+  js?: string[]                   // JavaScript files to inject
+  run_at?: string                 // 'document_start' | 'document_end' | 'document_idle'
+  all_frames?: boolean            // Inject into all frames
+  match_about_blank?: boolean     // Match about:blank
+  include_globs?: string[]        // Glob patterns to include
+  exclude_globs?: string[]        // Glob patterns to exclude
+  world?: chrome.scripting.ExecutionWorld | string  // 'ISOLATED' | 'MAIN'
+}
+```
+
+## Permissions
+
+<ResponseField name="permissions" type="chrome.runtime.ManifestPermissions[] | string[]">
+  Array of permission strings (e.g., `["storage", "tabs"]`)
+</ResponseField>
+
+<ResponseField name="optional_permissions" type="chrome.runtime.ManifestPermissions[] | string[]">
+  Permissions that can be requested at runtime
+</ResponseField>
+
+<ResponseField name="host_permissions" type="string[]">
+  URL patterns for host access (e.g., `["https://*.example.com/*"]`)
+</ResponseField>
+
+<ResponseField name="optional_host_permissions" type="string[]">
+  Optional host permissions that can be requested at runtime
+</ResponseField>
+
+## User Interface
+
+<ResponseField name="action" type="chrome.runtime.ManifestAction">
+  Configuration for the extension's toolbar action (popup, icon, etc.)
+</ResponseField>
+
+<ResponseField name="options_page" type="string">
+  Path to the options page (legacy, use `options_ui` instead)
+</ResponseField>
+
+<ResponseField name="options_ui" type="OptionsUI">
+  Configuration for the options page
+  
+  ```typescript
+  interface OptionsUI {
+    page?: string
+    chrome_style?: boolean
+    open_in_tab?: boolean
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="side_panel" type="SidePanel">
+  Configuration for Chrome's side panel
+  
+  ```typescript
+  interface SidePanel {
+    default_path?: string
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="devtools_page" type="string">
+  Path to the DevTools page
+</ResponseField>
+
+## Web Accessible Resources
+
+<ResponseField name="web_accessible_resources" type="(WebAccessibleResourceById | WebAccessibleResourceByMatch)[]">
+  Resources that can be accessed by web pages or other extensions
+</ResponseField>
+
+### By Match Pattern
+
+```typescript
+interface WebAccessibleResourceByMatch {
+  matches: string[]              // URL patterns that can access resources
+  resources: string[]            // Resource paths
+  use_dynamic_url?: boolean      // Use dynamic URLs for resources
+}
+```
+
+### By Extension ID
+
+```typescript
+interface WebAccessibleResourceById {
+  extension_ids: string[]        // Extension IDs that can access resources
+  resources: string[]            // Resource paths
+  use_dynamic_url?: boolean      // Use dynamic URLs for resources
+}
+```
+
+## Declarative Net Request
+
+<ResponseField name="declarative_net_request" type="DeclarativeNetRequest">
+  Configuration for declarative net request rules
+  
+  ```typescript
+  interface DeclarativeNetRequest {
+    rule_resources: DeclarativeNetRequestResource[]
+  }
+  
+  interface DeclarativeNetRequestResource {
+    id: string
+    enabled: boolean
+    path: string  // Path to JSON rules file
+  }
+  ```
+</ResponseField>
+
+## Content Security Policy
+
+<ResponseField name="content_security_policy" type="ContentSecurityPolicy">
+  CSP configuration for extension pages
+  
+  ```typescript
+  interface ContentSecurityPolicy {
+    extension_pages?: string
+    sandbox?: string
+  }
+  ```
+</ResponseField>
+
+## Commands
+
+<ResponseField name="commands" type="Record<string, Command>">
+  Keyboard shortcuts for your extension
+  
+  ```typescript
+  interface Command {
+    suggested_key?: {
+      default?: string
+      windows?: string
+      mac?: string
+      chromeos?: string
+      linux?: string
+    }
+    description?: string
+    global?: boolean
+  }
+  ```
+</ResponseField>
+
+## Chrome Overrides
+
+<ResponseField name="chrome_url_overrides" type="ChromeUrlOverrides">
+  Override Chrome's built-in pages
+  
+  ```typescript
+  interface ChromeUrlOverrides {
+    bookmarks?: string   // Override bookmarks page
+    history?: string     // Override history page
+    newtab?: string      // Override new tab page
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="chrome_settings_overrides" type="ChromeSettingsOverrides">
+  Override Chrome settings
+  
+  ```typescript
+  interface ChromeSettingsOverrides {
+    homepage?: string
+    search_provider?: chrome.runtime.SearchProvider
+    startup_pages?: string[]
+  }
+  ```
+</ResponseField>
+
+## Firefox-Specific
+
+<ResponseField name="browser_specific_settings" type="BrowserSpecificSettings">
+  Firefox-specific settings including extension ID and version requirements
+  
+  ```typescript
+  interface BrowserSpecificSettings {
+    gecko: {
+      id: string                          // Extension ID (required for Firefox)
+      strict_min_version?: string         // Minimum Firefox version
+      strict_max_version?: string         // Maximum Firefox version
+      update_url?: string                 // Custom update URL
+      data_collection_permissions: {
+        required: GeckoPermissionsRequired[]
+        optional?: GeckoPermissionsOptional[]
+      }
+    }
+  }
+  ```
+</ResponseField>
+
+## Other Fields
+
+<ResponseField name="author" type="{ email: string }">
+  Extension author information
+</ResponseField>
+
+<ResponseField name="homepage_url" type="string">
+  URL to the extension's homepage
+</ResponseField>
+
+<ResponseField name="short_name" type="string">
+  Short name for the extension (12 characters max recommended)
+</ResponseField>
+
+<ResponseField name="version_name" type="string">
+  Human-readable version string (e.g., `"1.0 beta"`)
+</ResponseField>
+
+<ResponseField name="minimum_chrome_version" type="string">
+  Minimum Chrome version required
+</ResponseField>
+
+<ResponseField name="key" type="string">
+  Public key for the extension ID
+</ResponseField>
+
+<ResponseField name="update_url" type="string">
+  URL for extension updates
+</ResponseField>
+
+<ResponseField name="omnibox" type="{ keyword: string }">
+  Register a keyword for the omnibox
+</ResponseField>
+
+<ResponseField name="externally_connectable" type="ExternallyConnectable">
+  Configure external messaging connections
+  
+  ```typescript
+  interface ExternallyConnectable {
+    ids?: string[]                    // Extension IDs
+    matches?: string[]                // URL patterns
+    accepts_tls_channel_id?: boolean
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="storage" type="{ managed_schema: string }">
+  Path to managed storage schema
+</ResponseField>
+
+<ResponseField name="incognito" type="string">
+  Incognito mode behavior: `"spanning"`, `"split"`, or `"not_allowed"`
+</ResponseField>
+
+<ResponseField name="offline_enabled" type="boolean">
+  Whether the extension works offline
+</ResponseField>
+
+## Example Manifest
+
+```json
+{
+  "manifest_version": 3,
+  "name": "My Extension",
+  "version": "1.0.0",
+  "description": "A sample Chrome extension",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "src/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png"
+    }
+  },
+  "background": {
+    "service_worker": "src/background.ts",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content.ts"],
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": [
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://*.example.com/*"
+  ]
+}
+```

@@ -1,0 +1,295 @@
+---
+title: defineManifest()
+description: Type-safe helper function for defining Chrome Extension manifest configurations
+---
+
+`defineManifest()` is a helper function that provides TypeScript type checking and IntelliSense for your Chrome Extension manifest configuration. It validates file paths and ensures your manifest follows the correct structure.
+
+## Usage
+
+```typescript
+import { defineManifest } from '@crxjs/vite-plugin'
+import pkg from './package.json'
+
+export default defineManifest({
+  manifest_version: 3,
+  name: pkg.name,
+  version: pkg.version,
+  icons: {
+    48: 'public/logo.png',
+  },
+  action: {
+    default_icon: {
+      48: 'public/logo.png',
+    },
+    default_popup: 'src/popup/index.html',
+  },
+  content_scripts: [{
+    js: ['src/content/main.tsx'],
+    matches: ['https://*/*'],
+  }],
+})
+```
+
+## Function Signature
+
+```typescript
+function defineManifest<T extends string>(
+  manifest: ManifestV3Options<T>
+): ManifestV3Export
+```
+
+<ParamField path="manifest" type="ManifestV3Options<T>">
+  The manifest configuration object, async manifest, or function that returns a manifest.
+</ParamField>
+
+## Parameters
+
+The manifest parameter accepts three forms:
+
+### Static Manifest Object
+
+```typescript
+export default defineManifest({
+  manifest_version: 3,
+  name: 'My Extension',
+  version: '1.0.0',
+  // ... other fields
+})
+```
+
+### Async Manifest
+
+```typescript
+export default defineManifest(Promise.resolve({
+  manifest_version: 3,
+  name: 'My Extension',
+  version: '1.0.0',
+}))
+```
+
+### Dynamic Manifest Function
+
+```typescript
+import type { ConfigEnv } from 'vite'
+
+export default defineManifest((env: ConfigEnv) => ({
+  manifest_version: 3,
+  name: env.mode === 'production' ? 'My Extension' : 'My Extension (Dev)',
+  version: '1.0.0',
+}))
+```
+
+## File Path Validation
+
+`defineManifest()` provides compile-time validation for file paths using TypeScript's type system. File paths must:
+
+- Be relative to the Vite project root (where `vite.config.js` is located)
+- NOT start with `./`, `/`, or `\`
+- Include a file extension
+
+### Valid File Paths
+
+```typescript
+export default defineManifest({
+  manifest_version: 3,
+  name: 'My Extension',
+  version: '1.0.0',
+  action: {
+    default_popup: 'src/popup.html', // ✓ Valid
+  },
+  background: {
+    service_worker: 'src/background.js', // ✓ Valid
+  },
+  content_scripts: [{
+    js: ['src/content.js'], // ✓ Valid
+    css: ['assets/content.css'], // ✓ Valid
+    matches: ['https://*/*'],
+  }],
+})
+```
+
+### Invalid File Paths
+
+```typescript
+export default defineManifest({
+  manifest_version: 3,
+  name: 'My Extension',
+  version: '1.0.0',
+  action: {
+    default_popup: './src/popup.html', // ✗ Starts with ./
+  },
+  background: {
+    service_worker: '/src/background.js', // ✗ Starts with /
+  },
+})
+```
+
+## Supported Manifest Fields
+
+`defineManifest()` supports all Manifest V3 fields with enhanced type checking for file paths in the following fields:
+
+<ParamField path="icons" type="ManifestIcons<T>">
+  Extension icons with size keys (16, 48, 128, etc.)
+  
+  ```typescript
+  icons: {
+    16: 'assets/icon-16.png',
+    48: 'assets/icon-48.png',
+    128: 'assets/icon-128.png',
+  }
+  ```
+</ParamField>
+
+<ParamField path="action" type="object">
+  Browser action configuration
+  
+  ```typescript
+  action: {
+    default_icon: {
+      48: 'assets/icon.png'
+    },
+    default_popup: 'src/popup.html',
+    default_title: 'My Extension'
+  }
+  ```
+</ParamField>
+
+<ParamField path="background" type="ChromeManifestBackground | FirefoxManifestBackground">
+  Background script configuration
+  
+  **Chrome (Service Worker):**
+  ```typescript
+  background: {
+    service_worker: 'src/background.js',
+    type: 'module' // Optional: for ES modules
+  }
+  ```
+  
+  **Firefox (Scripts):**
+  ```typescript
+  background: {
+    scripts: ['src/background.js'],
+    persistent: false
+  }
+  ```
+</ParamField>
+
+<ParamField path="content_scripts" type="array">
+  Content script configurations
+  
+  ```typescript
+  content_scripts: [{
+    matches: ['https://*/*'],
+    js: ['src/content.js'],
+    css: ['src/content.css'],
+    run_at: 'document_end',
+    all_frames: false,
+    world: 'ISOLATED' // or 'MAIN' (no HMR support in MAIN)
+  }]
+  ```
+  
+  <Warning>
+    Content scripts with `world: 'MAIN'` do NOT support CRXJS HMR.
+  </Warning>
+</ParamField>
+
+<ParamField path="devtools_page" type="string">
+  DevTools page HTML file
+  
+  ```typescript
+  devtools_page: 'src/devtools.html'
+  ```
+</ParamField>
+
+<ParamField path="options_page" type="string">
+  Options page HTML file
+  
+  ```typescript
+  options_page: 'src/options.html'
+  ```
+</ParamField>
+
+<ParamField path="input_components" type="array">
+  Input method editor components
+  
+  ```typescript
+  input_components: [{
+    name: 'My IME',
+    options_page: 'src/ime-options.html'
+  }]
+  ```
+</ParamField>
+
+## Return Type
+
+```typescript
+type ManifestV3Export = 
+  | ManifestV3 
+  | Promise<ManifestV3> 
+  | ((env: ConfigEnv) => ManifestV3 | Promise<ManifestV3>)
+```
+
+The function returns the manifest in the same form it was provided (object, promise, or function), enabling all three usage patterns.
+
+## TypeScript Types
+
+### ManifestV3Options
+
+```typescript
+type ManifestV3Options<T extends string> = 
+  | ManifestOptions<T>
+  | Promise<ManifestOptions<T>>
+  | ManifestV3Define<T>
+```
+
+### ManifestV3Define
+
+```typescript
+type ManifestV3Define<T extends string> = (
+  env: ConfigEnv
+) => ManifestOptions<T> | Promise<ManifestOptions<T>>
+```
+
+### ManifestFilePath
+
+```typescript
+type ManifestFilePath<T extends string> = 
+  IsStringLiteral<T> extends true
+    ? LiteralManifestFilePath<T>
+    : T
+```
+
+This type enforces that file paths:
+- Don't start with `.`, `/`, or `\`
+- Include a file extension
+
+## Environment-Specific Manifests
+
+Use the function form to access Vite's build environment:
+
+```typescript
+import { defineManifest } from '@crxjs/vite-plugin'
+import type { ConfigEnv } from 'vite'
+
+export default defineManifest((env: ConfigEnv) => {
+  const isDev = env.mode === 'development'
+  
+  return {
+    manifest_version: 3,
+    name: isDev ? 'My Extension (Dev)' : 'My Extension',
+    version: '1.0.0',
+    permissions: isDev 
+      ? ['tabs', 'storage', 'debugger'] 
+      : ['tabs', 'storage'],
+    action: {
+      default_popup: 'src/popup.html',
+    },
+  }
+})
+```
+
+## Related
+
+- [defineDynamicResource()](/api/define-dynamic-resource) - Define web accessible resources for dynamic imports
+- [Manifest Configuration](/concepts/manifest) - Complete guide to manifest setup

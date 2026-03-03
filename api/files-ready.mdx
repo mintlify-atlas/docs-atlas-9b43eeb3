@@ -1,0 +1,115 @@
+---
+title: "allFilesReady() & fileReady()"
+description: "Wait for files to be written during development"
+---
+
+These utility functions allow you to wait for the file writer to complete operations during development mode.
+
+## allFilesReady()
+
+Resolves when all existing files in the file writer queue have been written to disk.
+
+```typescript
+import { allFilesReady } from '@crxjs/vite-plugin/fileWriter'
+
+await allFilesReady()
+console.log('All files have been written')
+```
+
+### Return Value
+
+<ResponseField name="Promise<void>" type="Promise<void>">
+  Resolves when all files in the current queue are written to disk. Does not reject on write errors.
+</ResponseField>
+
+### Behavior
+
+- Waits for the build to complete (`build_end` event)
+- Monitors all files in the output files map
+- Resolves when all file write promises settle (both fulfilled and rejected)
+- Useful for ensuring files are ready before performing operations that depend on them
+
+### Usage Notes
+
+- This function is only relevant during development mode
+- It waits for files that already exist in the queue, not files added afterwards
+- Write errors do not cause this promise to reject
+
+---
+
+## fileReady()
+
+Resolves when a specific file and all its dependencies have been written to disk.
+
+```typescript
+import { fileReady } from '@crxjs/vite-plugin/fileWriter'
+
+await fileReady({ type: 'module', id: '/src/content.ts' })
+console.log('Content script and its dependencies are ready')
+```
+
+### Parameters
+
+<ParamField path="script" type="FileWriterId" required>
+  The file identifier object
+  
+  <ParamField path="script.type" type="'module' | 'iife' | 'loader' | 'asset'" required>
+    The type of file to wait for
+  </ParamField>
+  
+  <ParamField path="script.id" type="string" required>
+    The file path or identifier (e.g., `/src/content.ts`)
+  </ParamField>
+</ParamField>
+
+### Return Value
+
+<ResponseField name="Promise<void>" type="Promise<void>">
+  Resolves when the file and all its dependencies are written. Rejects if the file is not found in the output files map.
+</ResponseField>
+
+### Behavior
+
+- Looks up the file in the output files map by its generated filename
+- Waits for the file's write operation to complete
+- Recursively waits for all dependencies to be written
+- Throws an error if the file is not found in the output map
+
+### Usage Notes
+
+- The file must have been added to the file writer before calling this function
+- Dependencies are tracked automatically and waited for recursively
+- Useful when you need to ensure a specific file is ready before proceeding
+
+---
+
+## Example: Waiting for Content Scripts
+
+```typescript
+import { start, fileReady } from '@crxjs/vite-plugin/fileWriter'
+
+// Start the file writer
+await start({ server: viteDevServer })
+
+// Wait for a specific content script
+await fileReady({ 
+  type: 'module', 
+  id: '/src/content/main.ts' 
+})
+
+console.log('Content script is ready to use')
+```
+
+## Example: Waiting for All Files
+
+```typescript
+import { start, allFilesReady } from '@crxjs/vite-plugin/fileWriter'
+
+// Start the file writer
+await start({ server: viteDevServer })
+
+// Wait for all files to be written
+await allFilesReady()
+
+console.log('All extension files have been written')
+```

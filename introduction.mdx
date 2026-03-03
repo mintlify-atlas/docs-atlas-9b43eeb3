@@ -1,0 +1,110 @@
+---
+title: Introduction to CRXJS Vite Plugin
+description: Build modern Chrome extensions with Vite, HMR, and zero configuration
+---
+
+# Introduction to CRXJS Vite Plugin
+
+CRXJS Vite Plugin is a tool that helps you build Chrome Extensions using modern web development technology. It brings the polished developer experience of Vite to Chrome extension development with true HMR and zero-config setup.
+
+<CardGroup cols={2}>
+  <Card
+    title="Quick start"
+    icon="rocket"
+    href="/quickstart"
+  >
+    Get your first extension running in 90 seconds
+  </Card>
+  <Card
+    title="Installation"
+    icon="download"
+    href="/installation"
+  >
+    Detailed installation and setup instructions
+  </Card>
+  <Card
+    title="Concepts"
+    icon="lightbulb"
+    href="/concepts/manifest"
+  >
+    Learn about manifests, pages, and content scripts
+  </Card>
+  <Card
+    title="Configuration"
+    icon="gear"
+    href="/config/plugin-options"
+  >
+    Advanced configuration options
+  </Card>
+</CardGroup>
+
+## Why CRXJS?
+
+Building Chrome Extensions shouldn't require wrestling with build tools. CRXJS simplifies extension development by combining Vite's refined features with a simple configuration strategy.
+
+### Modern developer experience
+
+We've grown to expect a polished developer experience when building web apps. Tools like Vite make it easy to start with HMR, fast builds, and modern JavaScript. Unfortunately, Chrome Extension development has traditionally been more challenging.
+
+### The problem
+
+You search for the perfect boilerplate, but the most popular ones:
+- Don't support HMR for content scripts
+- Require configuration in multiple places
+- Only support one framework
+- Need complex setup for adding new pages
+
+### The solution
+
+CRXJS Vite Plugin solves these problems with a single principle: **use the manifest**.
+
+## Key features
+
+<CardGroup cols={2}>
+  <Card title="Full Vite plugin ecosystem" icon="puzzle-piece">
+    Leverage any Vite-compatible plugins with zero extra setup
+  </Card>
+  <Card title="Zero configuration" icon="magic">
+    Start developing immediately with intelligent defaults
+  </Card>
+  <Card title="Manifest V3 support" icon="shield">
+    Built for modern Chrome extensions with enhanced security
+  </Card>
+  <Card title="True hot module replacement" icon="fire">
+    Instant UI updates while preserving extension state - even works with content scripts
+  </Card>
+  <Card title="Static asset import" icon="image">
+    Directly reference images and fonts in your code
+  </Card>
+  <Card title="Auto web-accessible resources" icon="globe">
+    Automatic generation of web_accessible_resources manifest entries
+  </Card>
+</CardGroup>
+
+## Use the manifest
+
+CRXJS parses your `manifest.json` to discover entry files for your extension. The manifest is already the central document that declares most files and configuration for your extension - why duplicate that information elsewhere?
+
+<Note>
+  CRXJS automatically finds HTML pages, content scripts, background workers, and other resources by reading your manifest file. No separate configuration needed.
+</Note>
+
+## Framework support
+
+CRXJS works with any framework that Vite supports:
+
+- React
+- Vue
+- Svelte
+- Solid
+- Vanilla JavaScript/TypeScript
+
+The plugin is framework-agnostic, so you can use your favorite tools and libraries without special configuration.
+
+## Get started
+
+Ready to build your first extension? Head over to the [Quick start](/quickstart) guide to get up and running in 90 seconds, or check out the [Installation](/installation) guide for detailed setup instructions.
+
+<Tip>
+  New to Chrome Extensions? Check out the [Concepts](/concepts/manifest) section to learn about manifests, pages, and content scripts.
+</Tip>

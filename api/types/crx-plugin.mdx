@@ -1,0 +1,184 @@
+---
+title: "CrxPlugin Type"
+description: "TypeScript type definition for CRXJS plugins"
+---
+
+The `CrxPlugin` type extends Vite's `VitePlugin` interface with additional hooks specific to Chrome extension development.
+
+## Import
+
+```typescript
+import type { CrxPlugin } from '@crxjs/vite-plugin'
+```
+
+## Type Definition
+
+```typescript
+interface CrxPlugin extends VitePlugin {
+  /**
+   * Runs during the transform hook for the manifest. Filenames use input
+   * filenames.
+   */
+  transformCrxManifest?: (
+    this: PluginContext,
+    manifest: ManifestV3,
+  ) => Promise<ManifestV3 | null | undefined> | ManifestV3 | null | undefined
+  
+  /**
+   * Runs during generateBundle, before manifest output. Filenames use output
+   * filenames.
+   */
+  renderCrxManifest?: (
+    this: PluginContext,
+    manifest: ManifestV3,
+    bundle: OutputBundle,
+  ) => Promise<ManifestV3 | null | undefined> | ManifestV3 | null | undefined
+  
+  /**
+   * Runs in the file writer on content scripts during development. `script.id`
+   * is Vite URL format.
+   */
+  renderCrxDevScript?: (
+    code: string,
+    script: CrxDevScriptId,
+  ) => Promise<string | null | undefined> | string | null | undefined
+}
+```
+
+## Hooks
+
+### transformCrxManifest
+
+Transform the manifest during the Vite transform phase.
+
+<ParamField path="this" type="PluginContext" required>
+  Rollup plugin context providing access to plugin utilities and state
+</ParamField>
+
+<ParamField path="manifest" type="ManifestV3" required>
+  The manifest object with input filenames (before bundling)
+</ParamField>
+
+<ResponseField name="return" type="Promise<ManifestV3 | null | undefined> | ManifestV3 | null | undefined">
+  Return the transformed manifest, or `null`/`undefined` to skip
+</ResponseField>
+
+### renderCrxManifest
+
+Render the final manifest with output filenames during bundle generation.
+
+<ParamField path="this" type="PluginContext" required>
+  Rollup plugin context providing access to plugin utilities and state
+</ParamField>
+
+<ParamField path="manifest" type="ManifestV3" required>
+  The manifest object with output filenames (after bundling)
+</ParamField>
+
+<ParamField path="bundle" type="OutputBundle" required>
+  Rollup's output bundle containing all generated files
+</ParamField>
+
+<ResponseField name="return" type="Promise<ManifestV3 | null | undefined> | ManifestV3 | null | undefined">
+  Return the transformed manifest, or `null`/`undefined` to skip
+</ResponseField>
+
+### renderCrxDevScript
+
+Transform script code during development before writing to disk.
+
+<ParamField path="code" type="string" required>
+  The transformed script code from Vite
+</ParamField>
+
+<ParamField path="script" type="CrxDevScriptId" required>
+  Script metadata with `id` (Vite URL) and `type` (`'module'` or `'iife'`)
+</ParamField>
+
+<ResponseField name="return" type="Promise<string | null | undefined> | string | null | undefined">
+  Return the transformed code, or `null`/`undefined` to skip
+</ResponseField>
+
+## Related Types
+
+### CrxDevScriptId
+
+```typescript
+type CrxDevScriptId = {
+  id: string              // Script identifier in Vite URL format
+  type: 'module' | 'iife' // Output format
+}
+```
+
+### CrxDevAssetId
+
+```typescript
+type CrxDevAssetId = {
+  id: string                        // Asset identifier
+  type: 'asset'                     // Asset type
+  source?: string | Uint8Array      // Optional asset source
+}
+```
+
+## Usage Example
+
+```typescript
+import type { CrxPlugin } from '@crxjs/vite-plugin'
+
+const myPlugin: CrxPlugin = {
+  name: 'my-crx-plugin',
+  
+  transformCrxManifest(manifest) {
+    // Add permissions during transform phase
+    return {
+      ...manifest,
+      permissions: [
+        ...(manifest.permissions || []),
+        'storage'
+      ]
+    }
+  },
+  
+  renderCrxManifest(manifest, bundle) {
+    // Final modifications with output filenames
+    const cssFiles = Object.keys(bundle)
+      .filter(file => file.endsWith('.css'))
+    
+    return {
+      ...manifest,
+      web_accessible_resources: [
+        {
+          resources: cssFiles,
+          matches: ['<all_urls>']
+        }
+      ]
+    }
+  },
+  
+  renderCrxDevScript(code, script) {
+    // Inject code into development scripts
+    if (script.type === 'module') {
+      return `console.log('Loading: ${script.id}');\n${code}`
+    }
+    return code
+  }
+}
+
+export default myPlugin
+```
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="CrxPlugin Interface" icon="puzzle-piece" href="/api/crx-plugin-interface">
+    Detailed documentation on CrxPlugin hooks and usage
+  </Card>
+  
+  <Card title="ManifestV3" icon="file-code" href="/api/types/manifest-v3">
+    Complete TypeScript interface for Manifest V3
+  </Card>
+  
+  <Card title="CrxOptions" icon="gear" href="/api/types/crx-options">
+    Configuration options for the CRXJS plugin
+  </Card>
+</CardGroup>

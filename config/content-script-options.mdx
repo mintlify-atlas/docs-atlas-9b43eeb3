@@ -1,0 +1,427 @@
+---
+title: "Content Script Options"
+description: "Configure content script behavior and Hot Module Replacement"
+---
+
+Content scripts have unique requirements in Chrome extensions. CRXJS provides specialized configuration options to handle content script loading, CSS injection, and Hot Module Replacement (HMR).
+
+## Overview
+
+Content script options are configured under the `contentScripts` key in your CRXJS configuration:
+
+```typescript
+import { crx } from '@crxjs/vite-plugin'
+
+crx({
+  manifest,
+  contentScripts: {
+    preambleCode: false,
+    hmrTimeout: 5000,
+    injectCss: true
+  }
+})
+```
+
+## Configuration Options
+
+### preambleCode
+
+<ParamField path="contentScripts.preambleCode" type="string | false | undefined">
+  Code injected before content scripts execute. Used to set up framework-specific functionality like React Fast Refresh.
+</ParamField>
+
+#### Automatic Configuration
+
+When using React with `@vitejs/plugin-react`, CRXJS automatically detects and applies the React preamble:
+
+```typescript
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import { crx } from '@crxjs/vite-plugin'
+
+export default defineConfig({
+  plugins: [
+    react(),
+    crx({ manifest })
+    // preambleCode is automatically configured for React Fast Refresh
+  ]
+})
+```
+
+<Note>
+  CRXJS automatically uses `@vitejs/plugin-react`'s `preambleCode` to enable Fast Refresh in content scripts. No manual configuration needed for React projects.
+</Note>
+
+#### Manual Configuration
+
+```typescript
+crx({
+  manifest,
+  contentScripts: {
+    // Custom preamble code
+    preambleCode: `
+      window.__vite_plugin_react_preamble_installed__ = true;
+      // Your custom initialization code
+    `
+  }
+})
+```
+
+#### Disable Preamble
+
+```typescript
+crx({
+  manifest,
+  contentScripts: {
+    // Disable preamble entirely
+    preambleCode: false
+  }
+})
+```
+
+<Warning>
+  Disabling `preambleCode` when using React will break Fast Refresh in content scripts during development.
+</Warning>
+
+### hmrTimeout
+
+<ParamField path="contentScripts.hmrTimeout" type="number">
+  Timeout in milliseconds for establishing HMR WebSocket connections in content scripts.
+
+  **Default:** `5000` (5 seconds)
+</ParamField>
+
+#### When to Adjust
+
+Increase the timeout if:
+- Your development server starts slowly
+- You're experiencing network latency
+- Content scripts are loading before the dev server is ready
+
+```typescript
+crx({
+  manifest,
+  contentScripts: {
+    hmrTimeout: 10000 // 10 seconds
+  }
+})
+```
+
+#### How It Works
+
+During development, CRXJS injects an HMR client into content scripts that connects to Vite's dev server via WebSocket. The `hmrTimeout` controls how long the client waits for the connection to establish before timing out.
+
+```typescript
+// Example HMR timeout behavior
+try {
+  await connectToHMRServer({ timeout: 5000 })
+  console.log('HMR connected')
+} catch (error) {
+  console.error('HMR connection timeout')
+}
+```
+
+<Tip>
+  If you see "HMR connection timeout" warnings in the console, try increasing `hmrTimeout`.
+</Tip>
+
+#### MAIN World Content Scripts
+
+Content scripts with `world: "MAIN"` **do not support HMR** and will always require a full page reload:
+
+```json
+// manifest.json
+{
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content.ts"],
+      "world": "MAIN" // No HMR support
+    }
+  ]
+}
+```
+
+<Warning>
+  Content scripts running in `world: "MAIN"` don't support HMR. Changes require reloading the page. CRXJS will warn you about these scripts during development.
+</Warning>
+
+### injectCss
+
+<ParamField path="contentScripts.injectCss" type="boolean">
+  Controls how CSS imported by content scripts is handled in the built extension.
+
+  **Default:** `true`
+</ParamField>
+
+#### When `injectCss: true` (default)
+
+CSS is injected into the page via JavaScript at runtime:
+
+```typescript
+// Your content script
+import './styles.css'
+
+// At runtime, CRXJS:
+// 1. Bundles CSS with the content script
+// 2. Injects it via <style> tag when the script loads
+```
+
+**Pros:**
+- CSS loads immediately with the content script
+- No additional web_accessible_resources entries needed
+- Simpler manifest configuration
+
+**Cons:**
+- Small JavaScript overhead for injection
+- CSS isn't cached separately
+
+#### When `injectCss: false`
+
+CSS files are emitted separately and added to `web_accessible_resources`:
+
+```typescript
+crx({
+  manifest,
+  contentScripts: {
+    injectCss: false
+  }
+})
+```
+
+With `injectCss: false`:
+
+```typescript
+// Your content script
+import './styles.css'
+
+// At build time, CRXJS:
+// 1. Emits styles.css as a separate file
+// 2. Adds it to web_accessible_resources in manifest
+// 3. You must manually load it in your content script
+```
+
+**Manual CSS loading:**
+
+```typescript
+// content.ts
+import stylesUrl from './styles.css?url'
+
+const link = document.createElement('link')
+link.rel = 'stylesheet'
+link.href = chrome.runtime.getURL(stylesUrl)
+document.head.appendChild(link)
+```
+
+**Pros:**
+- Full control over when/how CSS loads
+- CSS can be cached separately
+- Useful for conditional CSS loading
+
+**Cons:**
+- Requires manual loading code
+- More complex setup
+
+<Tip>
+  Use `injectCss: true` (default) for most cases. Only set to `false` if you need fine-grained control over CSS loading.
+</Tip>
+
+## Content Script Types
+
+CRXJS handles three types of content scripts differently:
+
+### Module Scripts (default)
+
+Standard ES module content scripts:
+
+```json
+{
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content.ts"]
+    }
+  ]
+}
+```
+
+- Supports HMR
+- Runs in ISOLATED world by default
+- Can use `import`/`export`
+- Supports dynamic imports
+
+### Loader Scripts
+
+When content scripts have imports or dynamic imports, CRXJS automatically creates a loader:
+
+```typescript
+// content.ts
+import { helper } from './helper'
+import('./dynamic-feature')
+
+// CRXJS creates:
+// - content.ts.js (your bundled script)
+// - content.ts-loader.js (loader that imports your script)
+// Manifest points to the loader
+```
+
+**When loaders are created:**
+- Script has imports
+- Script has dynamic imports  
+- Script exports functions (e.g., `onExecute`)
+
+**When loaders are skipped:**
+- Script has no imports
+- Script has no dynamic imports
+- Script has no exports
+
+In this case, the script is wrapped in an IIFE for scope isolation:
+
+```javascript
+(function(){
+  // Your content script code
+})()
+```
+
+### MAIN World Scripts
+
+Content scripts that run in the main page context:
+
+```json
+{
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content.ts"],
+      "world": "MAIN"
+    }
+  ]
+}
+```
+
+<Warning>
+  - No HMR support (requires page reload)
+  - Cannot use `chrome` APIs
+  - Can access page JavaScript directly
+  - CRXJS will log a warning during development
+</Warning>
+
+## Dynamic Content Scripts
+
+CRXJS supports dynamically injected content scripts via `chrome.scripting.executeScript`:
+
+```typescript
+// background.ts
+import contentScript from './content.ts?script'
+
+chrome.scripting.executeScript({
+  target: { tabId },
+  files: [contentScript]
+})
+```
+
+Dynamic scripts are automatically:
+- Added to `web_accessible_resources`
+- Configured with appropriate match patterns
+- Bundled with their dependencies
+
+## Development vs Production
+
+### Development Mode
+
+During development (`vite dev`):
+
+```typescript
+// CRXJS injects:
+// 1. Preamble code (if configured)
+// 2. Vite client for HMR
+// 3. HMR WebSocket connection
+// 4. Your content script
+
+// Generated loader:
+import 'http://localhost:5173/preamble.js'
+import 'http://localhost:5173/@vite/client'
+import 'http://localhost:5173/src/content.ts'
+```
+
+- All resources loaded from dev server
+- HMR enabled (except MAIN world scripts)
+- Source maps available
+
+### Production Build
+
+During build (`vite build`):
+
+```typescript
+// CRXJS creates:
+// - Bundled content script
+// - Minified loader (if needed)
+// - Optimized CSS (if injectCss: false)
+
+// Generated loader:
+import './content.js'
+```
+
+- All resources bundled and optimized
+- No HMR overhead
+- Minimal loader code
+
+## Complete Example
+
+```typescript
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import { crx } from '@crxjs/vite-plugin'
+import manifest from './manifest.json'
+
+export default defineConfig(({ mode }) => {
+  const isDev = mode === 'development'
+  
+  return {
+    plugins: [
+      react(),
+      crx({
+        manifest,
+        contentScripts: {
+          // React preamble auto-configured
+          // Override only if needed:
+          // preambleCode: false,
+          
+          // Increase timeout for slower networks
+          hmrTimeout: isDev ? 10000 : 5000,
+          
+          // Auto-inject CSS (default)
+          injectCss: true
+        }
+      })
+    ]
+  }
+})
+```
+
+## Troubleshooting
+
+### HMR Not Working
+
+1. Check console for timeout warnings
+2. Increase `hmrTimeout`
+3. Verify dev server is running
+4. Check if script uses `world: "MAIN"` (not supported)
+
+### CSS Not Loading
+
+1. With `injectCss: true` - CSS should auto-inject
+2. With `injectCss: false` - Ensure manual loading code is present
+3. Check `web_accessible_resources` in built manifest
+
+### React Fast Refresh Not Working
+
+1. Ensure `@vitejs/plugin-react` is installed
+2. Check that `preambleCode` isn't set to `false`
+3. Verify React plugin is before CRXJS plugin
+
+## See Also
+
+- [Plugin Options](/config/plugin-options) - All CRXJS configuration options
+- [Vite Configuration](/config/vite-config) - Vite-specific settings
+- [Chrome Content Scripts Documentation](https://developer.chrome.com/docs/extensions/mv3/content_scripts/)

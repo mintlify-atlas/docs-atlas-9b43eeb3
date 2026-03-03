@@ -1,0 +1,227 @@
+---
+title: "Plugin Options"
+description: "Configure CRXJS Vite Plugin with CrxOptions"
+---
+
+The CRXJS Vite Plugin accepts a configuration object that extends the core Vite configuration. Pass these options to the `crx()` function in your `vite.config.ts`.
+
+## Basic Usage
+
+```typescript
+import { defineConfig } from 'vite'
+import { crx } from '@crxjs/vite-plugin'
+import manifest from './manifest.json'
+
+export default defineConfig({
+  plugins: [
+    crx({
+      manifest,
+      contentScripts: {
+        preambleCode: false,
+        hmrTimeout: 5000,
+        injectCss: true
+      },
+      browser: 'chrome'
+    })
+  ]
+})
+```
+
+## Configuration Options
+
+### manifest
+
+<ParamField path="manifest" type="ManifestV3Export" required>
+  Your Chrome Extension manifest. Can be a manifest object, a function that returns a manifest, or imported from a JSON file.
+</ParamField>
+
+```typescript
+// As an object
+crx({
+  manifest: {
+    manifest_version: 3,
+    name: 'My Extension',
+    version: '1.0.0'
+  }
+})
+
+// As a function (for dynamic manifests)
+crx({
+  manifest: (env) => ({
+    manifest_version: 3,
+    name: env.mode === 'production' ? 'My Extension' : 'My Extension (Dev)',
+    version: '1.0.0'
+  })
+})
+
+// From JSON
+import manifest from './manifest.json'
+crx({ manifest })
+```
+
+### contentScripts
+
+<ParamField path="contentScripts" type="object">
+  Configuration options specific to content scripts behavior.
+</ParamField>
+
+#### contentScripts.preambleCode
+
+<ParamField path="contentScripts.preambleCode" type="string | false">
+  Code to inject before content scripts run. Set to `false` to disable. Automatically configured for React projects using `@vitejs/plugin-react`.
+
+  **Default:** Automatically detected for React, otherwise `undefined`
+</ParamField>
+
+```typescript
+crx({
+  manifest,
+  contentScripts: {
+    // Disable preamble code
+    preambleCode: false,
+    
+    // Custom preamble code
+    preambleCode: `
+      window.__vite_plugin_react_preamble_installed__ = true;
+    `
+  }
+})
+```
+
+<Note>
+  For React projects, CRXJS automatically uses `@vitejs/plugin-react`'s preamble code to ensure Fast Refresh works correctly in content scripts.
+</Note>
+
+#### contentScripts.hmrTimeout
+
+<ParamField path="contentScripts.hmrTimeout" type="number">
+  Timeout in milliseconds for Hot Module Replacement (HMR) connections in content scripts.
+
+  **Default:** `5000` (5 seconds)
+</ParamField>
+
+```typescript
+crx({
+  manifest,
+  contentScripts: {
+    // Increase timeout for slower connections
+    hmrTimeout: 10000
+  }
+})
+```
+
+<Warning>
+  Content scripts running in `world: "MAIN"` do not support HMR and will require a full page reload on changes.
+</Warning>
+
+#### contentScripts.injectCss
+
+<ParamField path="contentScripts.injectCss" type="boolean">
+  Whether to automatically inject CSS imported by content scripts into the page. When `true`, CSS is injected via JavaScript. When `false`, CSS files are included in web_accessible_resources.
+
+  **Default:** `true`
+</ParamField>
+
+```typescript
+crx({
+  manifest,
+  contentScripts: {
+    // Don't inject CSS automatically
+    injectCss: false
+  }
+})
+```
+
+<Tip>
+  Set `injectCss: false` if you need more control over when and how CSS is loaded in your content scripts.
+</Tip>
+
+### browser
+
+<ParamField path="browser" type="'chrome' | 'firefox'">
+  Target browser for the extension. Affects manifest generation and browser-specific optimizations.
+
+  **Default:** `'chrome'`
+</ParamField>
+
+```typescript
+// Build for Firefox
+crx({
+  manifest,
+  browser: 'firefox'
+})
+```
+
+**Browser-specific behaviors:**
+
+- **Chrome:** Uses `service_worker` for background scripts, supports `use_dynamic_url` in web_accessible_resources
+- **Firefox:** Uses `scripts` array for background scripts, omits `use_dynamic_url` (Firefox handles this automatically)
+
+See [Browser Support](/config/browser-support) for detailed differences.
+
+### fastGlobOptions
+
+<ParamField path="fastGlobOptions" type="FastGlobOptions">
+  Options passed to [fast-glob](https://github.com/mrmlnc/fast-glob) when scanning for files referenced in the manifest (icons, locales, rulesets, etc.).
+</ParamField>
+
+```typescript
+import type { Options as FastGlobOptions } from 'fast-glob'
+
+crx({
+  manifest,
+  fastGlobOptions: {
+    ignore: ['**/node_modules/**', '**/.git/**'],
+    dot: false,
+    followSymbolicLinks: false
+  }
+})
+```
+
+## Complete Example
+
+```typescript
+import { defineConfig } from 'vite'
+import { crx } from '@crxjs/vite-plugin'
+import react from '@vitejs/plugin-react'
+import manifest from './manifest.json'
+
+export default defineConfig({
+  plugins: [
+    react(),
+    crx({
+      manifest,
+      contentScripts: {
+        hmrTimeout: 10000,
+        injectCss: true
+      },
+      browser: 'chrome',
+      fastGlobOptions: {
+        ignore: ['**/test/**']
+      }
+    })
+  ]
+})
+```
+
+## Type Definitions
+
+The full TypeScript interface for `CrxOptions` is defined in `@crxjs/vite-plugin`:
+
+```typescript
+interface CrxOptions {
+  contentScripts?: {
+    preambleCode?: string | false
+    hmrTimeout?: number
+    injectCss?: boolean
+  }
+  fastGlobOptions?: FastGlobOptions
+  browser?: 'firefox' | 'chrome'
+}
+```
+
+## See Also
+
+- [Vite Configuration](/config/vite-config) - Recommended Vite settings
+- [Content Script Options](/config/content-script-options) - Deep dive into content script configuration
+- [Browser Support](/config/browser-support) - Chrome vs Firefox differences

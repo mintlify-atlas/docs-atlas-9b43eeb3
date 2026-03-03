@@ -1,122 +1,104 @@
 {
   "$schema": "https://mintlify.com/docs.json",
+  "name": "CRXJS Vite Plugin",
   "theme": "mint",
-  "name": "Mint Starter Kit",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#298cd6",
+    "light": "#f2bae4",
+    "dark": "#1a5d8f"
   },
-  "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/crxjs/chrome-extension-tools"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/crxjs/chrome-extension-tools"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Get Started",
             "pages": [
-              "index",
+              "introduction",
               "quickstart",
-              "development"
+              "installation"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Core Concepts",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "concepts/manifest",
+              "concepts/pages",
+              "concepts/background",
+              "concepts/content-scripts",
+              "concepts/web-accessible-resources",
+              "concepts/hmr"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Guides",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "guides/react",
+              "guides/vue",
+              "guides/svelte",
+              "guides/typescript",
+              "guides/static-assets",
+              "guides/environment-variables",
+              "guides/building-for-production"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Configuration",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "config/plugin-options",
+              "config/vite-config",
+              "config/content-script-options",
+              "config/browser-support"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Plugin API",
             "pages": [
-              "api-reference/introduction"
+              "api/crx",
+              "api/chrome-extension"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Manifest Helpers",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api/define-manifest",
+              "api/define-dynamic-resource"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/files-ready",
+              "api/crx-plugin-interface"
+            ]
+          },
+          {
+            "group": "Types",
+            "pages": [
+              "api/types/manifest-v3",
+              "api/types/crx-options",
+              "api/types/crx-plugin"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

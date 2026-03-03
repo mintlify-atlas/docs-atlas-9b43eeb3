@@ -1,0 +1,381 @@
+---
+title: Static Assets
+description: Import and use images, fonts, and other static assets in your Chrome extension
+---
+
+Vite provides excellent support for importing static assets. CRXJS builds on this foundation to make asset handling seamless in Chrome extensions.
+
+## Importing Assets
+
+You can import assets directly in your code:
+
+```tsx
+import logo from '@/assets/logo.svg'
+import icon from '@/assets/icon.png'
+import styles from './App.module.css'
+
+function App() {
+  return (
+    <div>
+      <img src={logo} alt="Logo" />
+      <img src={icon} alt="Icon" />
+    </div>
+  )
+}
+```
+
+## Supported Asset Types
+
+Vite handles these asset types out of the box:
+
+- **Images**: `.png`, `.jpg`, `.jpeg`, `.gif`, `.svg`, `.webp`, `.avif`
+- **Media**: `.mp4`, `.webm`, `.ogg`, `.mp3`, `.wav`, `.flac`, `.aac`
+- **Fonts**: `.woff`, `.woff2`, `.eot`, `.ttf`, `.otf`
+- **Other**: `.pdf`, `.txt`, `.json`
+
+## Asset URLs
+
+When you import an asset, Vite returns the public URL:
+
+```ts
+import imageUrl from './image.png'
+
+console.log(imageUrl) // '/assets/image-a8c3f4d2.png'
+```
+
+In production builds, assets are:
+- Copied to the output directory
+- Given content-based hash filenames for caching
+- Automatically optimized
+
+## SVG Components
+
+You can import SVGs as URLs or as inline components:
+
+<Tabs>
+  <Tab title="React">
+    ```tsx
+    import logoUrl from '@/assets/logo.svg'
+    import { ReactComponent as LogoIcon } from '@/assets/logo.svg'
+
+    function App() {
+      return (
+        <div>
+          {/* As image URL */}
+          <img src={logoUrl} alt="Logo" />
+          
+          {/* As inline component */}
+          <LogoIcon className="logo" />
+        </div>
+      )
+    }
+    ```
+
+    Install the SVGR plugin:
+    ```bash
+    npm install -D vite-plugin-svgr
+    ```
+
+    ```ts vite.config.ts
+    import svgr from 'vite-plugin-svgr'
+    
+    export default defineConfig({
+      plugins: [
+        react(),
+        svgr(),
+        crx({ manifest }),
+      ],
+    })
+    ```
+  </Tab>
+  <Tab title="Vue">
+    ```vue
+    <script setup>
+    import logoUrl from '@/assets/logo.svg'
+    </script>
+
+    <template>
+      <img :src="logoUrl" alt="Logo" />
+    </template>
+    ```
+  </Tab>
+  <Tab title="Svelte">
+    ```svelte
+    <script>
+      import logoUrl from '@/assets/logo.svg'
+    </script>
+
+    <img src={logoUrl} alt="Logo" />
+    ```
+  </Tab>
+</Tabs>
+
+## Public Directory
+
+Assets in the `public/` directory are served at the root path:
+
+```
+public/
+  logo.png
+  manifest-icon.png
+```
+
+Reference them with absolute paths:
+
+```ts manifest.config.ts
+import { defineManifest } from '@crxjs/vite-plugin'
+
+export default defineManifest({
+  manifest_version: 3,
+  icons: {
+    16: 'public/logo.png',
+    48: 'public/logo.png',
+    128: 'public/logo.png',
+  },
+  action: {
+    default_icon: {
+      16: 'public/logo.png',
+      48: 'public/logo.png',
+    },
+  },
+})
+```
+
+<Note>
+  Assets in `public/` are copied as-is without processing. Use `import` for assets that need optimization.
+</Note>
+
+## CSS and Assets
+
+Reference assets in CSS files:
+
+```css
+.logo {
+  background-image: url('@/assets/background.png');
+}
+
+@font-face {
+  font-family: 'CustomFont';
+  src: url('@/assets/fonts/custom.woff2') format('woff2');
+}
+```
+
+Vite automatically resolves these paths and processes the assets.
+
+## Web Accessible Resources
+
+To use assets in content scripts injected into web pages, make them web accessible:
+
+```ts manifest.config.ts
+import { defineManifest } from '@crxjs/vite-plugin'
+
+export default defineManifest({
+  manifest_version: 3,
+  web_accessible_resources: [
+    {
+      resources: ['assets/*'],
+      matches: ['https://*/*'],
+    },
+  ],
+})
+```
+
+Access them using `chrome.runtime.getURL()`:
+
+```ts
+import iconUrl from '@/assets/icon.png'
+
+// Get the full extension URL
+const fullUrl = chrome.runtime.getURL(iconUrl)
+
+// Use in content script
+const img = document.createElement('img')
+img.src = fullUrl
+document.body.appendChild(img)
+```
+
+## Asset Optimization
+
+### Image Optimization
+
+Install an image optimization plugin:
+
+```bash
+npm install -D vite-plugin-image-optimizer
+```
+
+```ts vite.config.ts
+import { ViteImageOptimizer } from 'vite-plugin-image-optimizer'
+
+export default defineConfig({
+  plugins: [
+    crx({ manifest }),
+    ViteImageOptimizer({
+      png: {
+        quality: 80,
+      },
+      jpeg: {
+        quality: 80,
+      },
+      webp: {
+        quality: 80,
+      },
+    }),
+  ],
+})
+```
+
+### Font Subsetting
+
+Only include characters you need:
+
+```bash
+npm install -D vite-plugin-fonts
+```
+
+```ts vite.config.ts
+import { VitePluginFonts } from 'vite-plugin-fonts'
+
+export default defineConfig({
+  plugins: [
+    crx({ manifest }),
+    VitePluginFonts({
+      google: {
+        families: ['Inter:400,600,700'],
+      },
+    }),
+  ],
+})
+```
+
+## Import as String
+
+Import files as raw strings:
+
+```ts
+import shader from './shader.glsl?raw'
+import template from './template.html?raw'
+
+console.log(shader) // File contents as string
+```
+
+## Import as URL
+
+Force URL import for any file:
+
+```ts
+import workerUrl from './worker.js?url'
+
+const worker = new Worker(workerUrl)
+```
+
+## Import as Data URL
+
+Import small assets as inline data URLs:
+
+```ts
+import smallIcon from './icon.png?inline'
+
+// smallIcon is a data URL: "data:image/png;base64,..."
+```
+
+<Warning>
+  Data URLs increase bundle size. Only use for small assets.
+</Warning>
+
+## Dynamic Imports
+
+Dynamically import assets based on runtime conditions:
+
+```ts
+const iconName = theme === 'dark' ? 'dark-icon.svg' : 'light-icon.svg'
+const icon = await import(`@/assets/${iconName}`)
+
+img.src = icon.default
+```
+
+## Asset Size Limits
+
+### Inline Assets
+
+Small assets (< 4KB) are automatically inlined as base64:
+
+```ts vite.config.ts
+export default defineConfig({
+  build: {
+    assetsInlineLimit: 4096, // bytes
+  },
+})
+```
+
+### Extension Size Limits
+
+Chrome Web Store limits:
+- Maximum upload size: 20 MB
+- Maximum unpacked size: 100 MB
+
+Optimize your assets to stay within these limits.
+
+## Organizing Assets
+
+Recommended project structure:
+
+```
+src/
+  assets/
+    icons/
+      logo.svg
+      close.svg
+    images/
+      banner.png
+      background.jpg
+    fonts/
+      custom.woff2
+    styles/
+      global.css
+  components/
+  ...
+public/
+  logo.png        # Manifest icons
+  icon-16.png
+  icon-48.png
+  icon-128.png
+```
+
+## TypeScript Support
+
+Add type definitions for asset imports:
+
+```ts vite-env.d.ts
+/// <reference types="vite/client" />
+
+interface ImportMetaEnv {
+  readonly VITE_API_URL: string
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv
+}
+
+// SVG as component (React)
+declare module '*.svg' {
+  import React from 'react'
+  export const ReactComponent: React.FC<React.SVGProps<SVGSVGElement>>
+  const src: string
+  export default src
+}
+```
+
+## Best Practices
+
+1. **Use imports for processed assets** - Import images/fonts that need optimization
+2. **Use public/ for static files** - Manifest icons and files that shouldn't be processed
+3. **Optimize images** - Compress and use modern formats (WebP, AVIF)
+4. **Lazy load large assets** - Use dynamic imports for assets not needed immediately
+5. **Set up web_accessible_resources** - Required for content script assets
+6. **Use path aliases** - Keep import paths clean with `@/assets/*`
+
+## Next Steps
+
+- [Environment Variables](/guides/environment-variables) - Configure assets per environment
+- [Building for Production](/guides/building-for-production) - Optimize assets for production

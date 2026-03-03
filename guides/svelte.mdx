@@ -1,0 +1,346 @@
+---
+title: Using CRXJS with Svelte
+description: Learn how to build Chrome extensions with Svelte and CRXJS Vite Plugin
+---
+
+CRXJS works seamlessly with Svelte, providing hot module replacement (HMR) and all the modern development features you expect from Vite.
+
+## Installation
+
+Install the required dependencies:
+
+```bash
+npm install svelte
+npm install -D @sveltejs/vite-plugin-svelte
+```
+
+## Vite Configuration
+
+Configure Vite to use both the Svelte and CRXJS plugins:
+
+```ts vite.config.ts
+import path from 'node:path'
+import { crx } from '@crxjs/vite-plugin'
+import { svelte } from '@sveltejs/vite-plugin-svelte'
+import { defineConfig } from 'vite'
+import manifest from './manifest.config'
+
+export default defineConfig({
+  resolve: {
+    alias: {
+      '@': `${path.resolve(__dirname, 'src')}`,
+    },
+  },
+  plugins: [
+    svelte({
+      compilerOptions: {
+        dev: true,
+      },
+    }),
+    crx({ manifest }),
+  ],
+  server: {
+    cors: {
+      origin: [
+        /chrome-extension:\/\//,
+      ],
+    },
+  },
+})
+```
+
+<Note>
+  The `svelte()` plugin must be placed **before** `crx()` in the plugins array.
+</Note>
+
+## Svelte Configuration
+
+Create a `svelte.config.js` file:
+
+```js svelte.config.js
+import { vitePreprocess } from '@sveltejs/vite-plugin-svelte'
+
+export default {
+  preprocess: vitePreprocess(),
+}
+```
+
+## TypeScript Configuration
+
+Set up TypeScript for Svelte:
+
+```json tsconfig.json
+{
+  "extends": "@tsconfig/svelte/tsconfig.json",
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    },
+    "types": ["vite/client", "chrome"],
+    "strict": true,
+    "skipLibCheck": true
+  },
+  "include": ["src"]
+}
+```
+
+## Popup Page with Svelte
+
+Create a Svelte popup component:
+
+```ts src/popup/main.ts
+import { mount } from 'svelte'
+import App from './App.svelte'
+import './style.css'
+
+const app = mount(App, {
+  target: document.getElementById('app'),
+})
+
+export default app
+```
+
+```svelte src/popup/App.svelte
+<script lang='ts'>
+  import CrxLogo from '@/assets/crx.svg'
+  import svelteLogo from '@/assets/svelte.svg'
+  import viteLogo from '@/assets/vite.svg'
+  import HelloWorld from '@/components/HelloWorld.svelte'
+</script>
+
+<div>
+  <a href='https://vite.dev' target='_blank'>
+    <img src={viteLogo} class='logo' alt='Vite logo'>
+  </a>
+  <a href='https://svelte.dev' target='_blank'>
+    <img src={svelteLogo} class='logo svelte' alt='Svelte logo'>
+  </a>
+  <a href='https://crxjs.dev/vite-plugin' target='_blank'>
+    <img src={CrxLogo} class='logo crx' alt='crx logo'>
+  </a>
+</div>
+<HelloWorld msg='Vite + Svelte + CRXJS' />
+
+<style>
+  .logo {
+    height: 6em;
+    padding: 1.5em;
+    will-change: filter;
+    transition: filter 300ms;
+  }
+  .logo:hover {
+    filter: drop-shadow(0 0 2em #646cffaa);
+  }
+  .logo.svelte:hover {
+    filter: drop-shadow(0 0 2em #ff3e00aa);
+  }
+  .logo.crx:hover {
+    filter: drop-shadow(0 0 2em #f2bae4aa);
+  }
+</style>
+```
+
+## Content Script with Svelte
+
+Inject Svelte into a webpage using a content script:
+
+```ts src/content/main.ts
+import { mount } from 'svelte'
+import App from './views/App.svelte'
+import './style.css'
+
+console.log('[CRXJS] Hello world from content script!')
+
+const container = document.createElement('div')
+container.id = 'crxjs-app'
+document.body.appendChild(container)
+
+const app = mount(App, {
+  target: container,
+})
+
+export default app
+```
+
+Update your manifest to include the content script:
+
+```ts manifest.config.ts
+import { defineManifest } from '@crxjs/vite-plugin'
+
+export default defineManifest({
+  manifest_version: 3,
+  name: 'My Svelte Extension',
+  version: '1.0.0',
+  action: {
+    default_popup: 'src/popup/index.html',
+  },
+  content_scripts: [{
+    js: ['src/content/main.ts'],
+    matches: ['https://*/*'],
+  }],
+})
+```
+
+## Hot Module Replacement
+
+CRXJS provides full HMR support for Svelte:
+
+- Component changes update instantly with state preservation
+- Style changes apply immediately
+- Manifest changes automatically reload the extension
+
+<Tip>
+  Svelte HMR works out of the box with CRXJS. Make changes to your components and see them update in real-time without losing state.
+</Tip>
+
+## Reactive Chrome APIs
+
+Use Svelte's reactivity with Chrome APIs:
+
+```svelte
+<script lang="ts">
+  import { onMount } from 'svelte'
+  
+  let tabs: chrome.tabs.Tab[] = []
+  
+  onMount(async () => {
+    tabs = await chrome.tabs.query({ currentWindow: true })
+  })
+  
+  async function closeTab(tabId: number) {
+    await chrome.tabs.remove(tabId)
+    tabs = tabs.filter(tab => tab.id !== tabId)
+  }
+</script>
+
+<div>
+  <h2>Open Tabs</h2>
+  <ul>
+    {#each tabs as tab (tab.id)}
+      <li>
+        {tab.title}
+        <button on:click={() => closeTab(tab.id!)}>Close</button>
+      </li>
+    {/each}
+  </ul>
+</div>
+```
+
+## Stores for Chrome Storage
+
+Create Svelte stores that sync with Chrome storage:
+
+```ts stores/storage.ts
+import { writable } from 'svelte/store'
+
+export function chromeStorage<T>(key: string, defaultValue: T) {
+  const { subscribe, set, update } = writable<T>(defaultValue)
+
+  // Load initial value
+  chrome.storage.sync.get([key], (result) => {
+    set(result[key] ?? defaultValue)
+  })
+
+  // Listen for changes from other contexts
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'sync' && changes[key]) {
+      set(changes[key].newValue)
+    }
+  })
+
+  return {
+    subscribe,
+    set: (value: T) => {
+      chrome.storage.sync.set({ [key]: value })
+      set(value)
+    },
+    update: (fn: (value: T) => T) => {
+      update((current) => {
+        const newValue = fn(current)
+        chrome.storage.sync.set({ [key]: newValue })
+        return newValue
+      })
+    },
+  }
+}
+```
+
+Use it in your components:
+
+```svelte
+<script lang="ts">
+  import { chromeStorage } from '@/stores/storage'
+  
+  const theme = chromeStorage('theme', 'light')
+  
+  function toggleTheme() {
+    $theme = $theme === 'light' ? 'dark' : 'light'
+  }
+</script>
+
+<button on:click={toggleTheme}>
+  Switch to {$theme === 'light' ? 'dark' : 'light'} mode
+</button>
+```
+
+## Svelte 5 Runes
+
+If you're using Svelte 5, you can leverage runes for even more powerful reactivity:
+
+```svelte
+<script lang="ts">
+  let count = $state(0)
+  let doubled = $derived(count * 2)
+  
+  async function saveCount() {
+    await chrome.storage.sync.set({ count })
+  }
+  
+  $effect(() => {
+    chrome.storage.sync.get(['count'], (result) => {
+      count = result.count ?? 0
+    })
+  })
+</script>
+
+<div>
+  <p>Count: {count}</p>
+  <p>Doubled: {doubled}</p>
+  <button onclick={() => count++}>Increment</button>
+  <button onclick={saveCount}>Save</button>
+</div>
+```
+
+## Package.json Scripts
+
+```json package.json
+{
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "svelte": "^5.0.0"
+  },
+  "devDependencies": {
+    "@crxjs/vite-plugin": "latest",
+    "@sveltejs/vite-plugin-svelte": "^5.0.0",
+    "@tsconfig/svelte": "^5.0.0",
+    "@types/chrome": "^0.0.313",
+    "typescript": "~5.7.0",
+    "vite": "^6.0.0"
+  }
+}
+```
+
+## Next Steps
+
+- [Static Assets](/guides/static-assets) - Import images and other assets
+- [TypeScript](/guides/typescript) - Advanced TypeScript configuration
+- [Building for Production](/guides/building-for-production) - Optimize your build

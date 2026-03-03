@@ -1,0 +1,278 @@
+---
+title: 'Web Accessible Resources'
+description: 'How CRXJS automatically manages web accessible resources for content scripts'
+---
+
+## Overview
+
+Chrome extensions must explicitly declare resources that web pages can access. CRXJS automatically handles this for content script dependencies, so you don't need to manually configure `web_accessible_resources` in most cases.
+
+## Automatic Resource Detection
+
+When you import assets in content scripts, CRXJS automatically:
+
+1. Detects imported files (images, fonts, CSS, etc.)
+2. Tracks all dependencies and dynamic imports
+3. Declares them as web accessible resources
+4. Associates them with the correct match patterns
+
+```typescript src/content.ts
+import logo from './logo.png'
+import './styles.css'
+import { Component } from './components/Component'
+
+// CRXJS automatically makes these files web accessible:
+// - logo.png
+// - styles.css
+// - components/Component.js (and its dependencies)
+```
+
+## How It Works
+
+### Development Mode
+
+During development, CRXJS makes **all resources** web accessible with `<all_urls>` to support hot module replacement:
+
+From the source code (plugin-webAccessibleResources.ts:54):
+
+```typescript
+const war: WebAccessibleResourceByMatch = {
+  matches: ['<all_urls>'],
+  resources: ['**/*', '*'],
+  use_dynamic_url: false,
+}
+manifest.web_accessible_resources.push(war)
+```
+
+### Production Mode
+
+In production, CRXJS analyzes the Vite build manifest to determine exact dependencies:
+
+From the source code (plugin-webAccessibleResources.ts:151):
+
+```typescript
+const { assets, css, imports } = compileFileResources(
+  fileName,
+  { chunks: bundleChunks, files: viteFiles, config },
+)
+
+const resource: WebAccessibleResourceByMatch = {
+  matches: matches, // from content_scripts
+  resources: [...assets, ...imports],
+}
+```
+
+Only necessary resources are exposed with minimal match patterns.
+
+## Manual Configuration
+
+For resources not imported by content scripts, manually declare them:
+
+```json manifest.json
+{
+  "web_accessible_resources": [
+    {
+      "resources": ["images/logo.png", "fonts/*.woff2"],
+      "matches": ["https://*.example.com/*"]
+    }
+  ]
+}
+```
+
+## Dynamic Content Scripts
+
+For dynamically injected scripts, use the `defineDynamicResource` helper:
+
+```typescript manifest.config.ts
+import { defineManifest, defineDynamicResource } from '@crxjs/vite-plugin'
+
+export default defineManifest({
+  manifest_version: 3,
+  name: 'My Extension',
+  web_accessible_resources: [
+    defineDynamicResource({
+      matches: ['https://*.example.com/*'],
+      use_dynamic_url: true,
+    }),
+  ],
+})
+```
+
+From the source code (defineManifest.ts:159):
+
+```typescript
+export const defineDynamicResource = ({
+  matches = ['http://*/*', 'https://*/*'],
+  use_dynamic_url = false,
+}): WebAccessibleResourceByMatch => ({
+  matches,
+  resources: [DYNAMIC_RESOURCE],
+  use_dynamic_url,
+})
+```
+
+The `<dynamic_resource>` placeholder is replaced with actual imported files during the build.
+
+## Resource Combination
+
+CRXJS combines redundant resources to minimize manifest size:
+
+From the source code (plugin-webAccessibleResources.ts:214):
+
+```typescript
+for (const [key, resources] of hashedResources)
+  if (resources.size > 0) {
+    const [use_dynamic_url, matches]: [boolean, string[]] = JSON.parse(key)
+    combinedResources.push({
+      matches,
+      resources: [...resources],
+      use_dynamic_url,
+    })
+  }
+```
+
+Resources with identical match patterns and `use_dynamic_url` settings are merged into a single entry.
+
+## Match Pattern Origins
+
+CRXJS simplifies match patterns to origins for loader-based content scripts:
+
+From the source code (plugin-webAccessibleResources.ts:184):
+
+```typescript
+if (type !== 'module') {
+  resource.matches = resource.matches.map(getMatchPatternOrigin)
+}
+```
+
+Example transformations:
+- `https://example.com/path/*` → `https://example.com/*`
+- `https://*.github.com/user/repo` → `https://*.github.com/*`
+
+## Source Maps
+
+CRXJS automatically includes source map files as web accessible resources:
+
+From the source code (plugin-webAccessibleResources.ts:237):
+
+```typescript
+if (chunk.map) {
+  const sourcemapFileName =
+    chunk.sourcemapFileName || `${chunk.fileName}.map`
+  if (sourcemapFileName in bundle) {
+    resourcesWithMaps.push(sourcemapFileName)
+  }
+}
+```
+
+This enables source map debugging in DevTools.
+
+## CSS Injection
+
+By default, CRXJS injects content script CSS automatically. To disable automatic injection:
+
+```typescript vite.config.ts
+export default defineConfig({
+  plugins: [
+    crx({
+      manifest,
+      contentScripts: {
+        injectCss: false,
+      },
+    }),
+  ],
+})
+```
+
+With `injectCss: false`, CSS files are made web accessible but not automatically injected.
+
+## Firefox Compatibility
+
+Firefox doesn't support `use_dynamic_url`. CRXJS removes it automatically:
+
+From the source code (plugin-webAccessibleResources.ts:226):
+
+```typescript
+if (browser === 'firefox') {
+  for (const war of combinedResources) {
+    delete war.use_dynamic_url
+  }
+}
+```
+
+## Extension IDs
+
+To restrict resources to specific extensions, use `extension_ids`:
+
+```json manifest.json
+{
+  "web_accessible_resources": [
+    {
+      "resources": ["images/logo.png"],
+      "extension_ids": ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]
+    }
+  ]
+}
+```
+
+## Security Considerations
+
+<Warning>
+Web accessible resources can be accessed by any matching website. Only expose necessary files.
+</Warning>
+
+### Best Practices
+
+1. **Use specific match patterns** instead of `<all_urls>` in production
+2. **Minimize exposed resources** by only importing what you need
+3. **Use `use_dynamic_url`** for sensitive resources to make URLs unpredictable
+4. **Validate origins** when loading resources from content scripts
+
+```typescript src/content.ts
+// Check origin before exposing resources
+if (window.location.hostname.endsWith('example.com')) {
+  const logo = chrome.runtime.getURL('images/logo.png')
+  // Use logo
+}
+```
+
+## Debugging
+
+Inspect web accessible resources in the built extension:
+
+1. Build your extension: `npm run build`
+2. Open `dist/manifest.json`
+3. Check the `web_accessible_resources` array
+
+```json dist/manifest.json
+{
+  "web_accessible_resources": [
+    {
+      "matches": ["https://*.example.com/*"],
+      "resources": [
+        "assets/logo-a1b2c3.png",
+        "assets/content-d4e5f6.js",
+        "assets/content-d4e5f6.js.map"
+      ],
+      "use_dynamic_url": false
+    }
+  ]
+}
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Content Scripts" icon="file-code" href="/concepts/content-scripts">
+    Import assets in content scripts
+  </Card>
+  
+  <Card title="Manifest" icon="file" href="/concepts/manifest">
+    Configure web accessible resources
+  </Card>
+</CardGroup>
+
+## Learn More
+
+- [Chrome Web Accessible Resources](https://developer.chrome.com/docs/extensions/mv3/manifest/web_accessible_resources/)
+- [Match Patterns](https://developer.chrome.com/docs/extensions/mv3/match_patterns/)

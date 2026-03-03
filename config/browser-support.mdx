@@ -1,0 +1,420 @@
+---
+title: "Browser Support"
+description: "Chrome vs Firefox compatibility and configuration differences"
+---
+
+CRXJS supports building extensions for both Chrome and Firefox. This guide covers browser-specific differences and how CRXJS handles them.
+
+## Configuration
+
+Set the target browser in your CRXJS configuration:
+
+```typescript
+import { crx } from '@crxjs/vite-plugin'
+import manifest from './manifest.json'
+
+crx({
+  manifest,
+  browser: 'chrome' // or 'firefox'
+})
+```
+
+<ParamField path="browser" type="'chrome' | 'firefox'">
+  Target browser for the extension build.
+
+  **Default:** `'chrome'`
+</ParamField>
+
+## Browser Differences
+
+CRXJS automatically handles browser-specific manifest and implementation differences:
+
+### Background Scripts
+
+#### Chrome
+
+```json
+// manifest.json (Chrome)
+{
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  }
+}
+```
+
+- Uses Service Worker API
+- No persistent background page
+- Must handle lifecycle events
+- Module imports supported
+
+#### Firefox
+
+```json
+// manifest.json (Firefox)
+{
+  "background": {
+    "scripts": ["background.js"],
+    "type": "module"
+  }
+}
+```
+
+- Uses background scripts array
+- Supports `persistent: false` for event pages
+- Different module loading syntax during development
+
+<Note>
+  CRXJS automatically transforms your manifest's `background` configuration based on the target browser.
+</Note>
+
+**Development differences:**
+
+```typescript
+// Chrome (development)
+import 'http://localhost:5173/@vite/env'
+import 'http://localhost:5173/worker-client.js'
+import 'http://localhost:5173/background.ts'
+
+// Firefox (development) - uses dynamic imports
+import('http://localhost:5173/@vite/env')
+import('http://localhost:5173/worker-client.js')
+import('http://localhost:5173/background.ts')
+```
+
+### Web Accessible Resources
+
+#### Chrome
+
+```json
+{
+  "web_accessible_resources": [
+    {
+      "matches": ["<all_urls>"],
+      "resources": ["assets/*"],
+      "use_dynamic_url": true
+    }
+  ]
+}
+```
+
+- Supports `use_dynamic_url` for security
+- Extension origin changes on each reload when enabled
+
+#### Firefox
+
+```json
+{
+  "web_accessible_resources": [
+    {
+      "matches": ["<all_urls>"],
+      "resources": ["assets/*"]
+    }
+  ]
+}
+```
+
+- Does **not** support `use_dynamic_url`
+- CRXJS automatically removes this field for Firefox
+- Firefox handles dynamic URLs by default
+
+<Warning>
+  CRXJS automatically strips `use_dynamic_url` from the manifest when building for Firefox, as Firefox doesn't support this field.
+</Warning>
+
+### Browser-Specific Settings
+
+For Firefox, you may need additional manifest fields:
+
+```json
+{
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "your-extension@example.com",
+      "strict_min_version": "109.0"
+    }
+  }
+}
+```
+
+<Tip>
+  Firefox requires a unique extension ID in `browser_specific_settings.gecko.id`. This is mandatory for Firefox Add-ons (AMO) submissions.
+</Tip>
+
+## Multi-Browser Build
+
+Build for both browsers using Vite modes:
+
+### Configuration
+
+```typescript
+// vite.config.ts
+import { defineConfig } from 'vite'
+import { crx } from '@crxjs/vite-plugin'
+import manifest from './manifest.json'
+
+export default defineConfig(({ mode }) => {
+  const browser = mode === 'firefox' ? 'firefox' : 'chrome'
+  
+  return {
+    plugins: [
+      crx({ 
+        manifest,
+        browser 
+      })
+    ],
+    build: {
+      outDir: `dist/${browser}`
+    }
+  }
+})
+```
+
+### Build Commands
+
+```json
+// package.json
+{
+  "scripts": {
+    "dev": "vite",
+    "dev:firefox": "vite --mode firefox",
+    "build": "vite build",
+    "build:firefox": "vite build --mode firefox",
+    "build:all": "npm run build && npm run build:firefox"
+  }
+}
+```
+
+Run builds:
+
+```bash
+# Chrome
+npm run build
+
+# Firefox
+npm run build:firefox
+
+# Both
+npm run build:all
+```
+
+## Dynamic Manifest
+
+Use a function to customize the manifest per browser:
+
+```typescript
+// vite.config.ts
+import { defineConfig } from 'vite'
+import { crx } from '@crxjs/vite-plugin'
+import baseManifest from './manifest.json'
+
+export default defineConfig(({ mode }) => {
+  const isFirefox = mode === 'firefox'
+  
+  return {
+    plugins: [
+      crx({
+        browser: isFirefox ? 'firefox' : 'chrome',
+        manifest: (env) => {
+          const manifest = { ...baseManifest }
+          
+          // Firefox-specific adjustments
+          if (isFirefox) {
+            manifest.browser_specific_settings = {
+              gecko: {
+                id: 'your-extension@example.com',
+                strict_min_version: '109.0'
+              }
+            }
+            
+            // Firefox doesn't support some Chrome features
+            delete manifest.side_panel
+          }
+          
+          return manifest
+        }
+      })
+    ],
+    build: {
+      outDir: `dist/${isFirefox ? 'firefox' : 'chrome'}`
+    }
+  }
+})
+```
+
+## Runtime Browser Detection
+
+Detect the browser in your extension code:
+
+```typescript
+// utils/browser.ts
+export const isFirefox = typeof browser !== 'undefined'
+export const isChrome = typeof chrome !== 'undefined' && !isFirefox
+
+// Or check user agent
+export function getBrowser() {
+  const agent = navigator.userAgent.toLowerCase()
+  if (agent.includes('firefox')) return 'firefox'
+  if (agent.includes('chrome')) return 'chrome'
+  if (agent.includes('edg')) return 'edge'
+  return 'unknown'
+}
+```
+
+Use browser-specific APIs:
+
+```typescript
+import { isFirefox } from './utils/browser'
+
+if (isFirefox) {
+  // Firefox-specific code
+  browser.storage.local.get('key')
+} else {
+  // Chrome-specific code
+  chrome.storage.local.get('key')
+}
+```
+
+<Tip>
+  Consider using [webextension-polyfill](https://github.com/mozilla/webextension-polyfill) for unified cross-browser APIs.
+</Tip>
+
+## API Compatibility
+
+### Chrome APIs vs WebExtension APIs
+
+| Feature | Chrome | Firefox | CRXJS Handling |
+|---------|--------|---------|----------------|
+| Background | Service Worker | Scripts | Auto-configured |
+| Promises | Callback-based | Promise-based | No change needed |
+| MV3 Support | Full | Partial | Use compatible features |
+| `use_dynamic_url` | Supported | Not supported | Auto-removed for Firefox |
+| `side_panel` | Supported | Not supported | Chrome-only |
+
+### Recommended: Use Promises
+
+Modern Chrome supports promises. Use them for better compatibility:
+
+```typescript
+// Good - Works in both
+const data = await chrome.storage.local.get('key')
+
+// Avoid - Callback style
+chrome.storage.local.get('key', (result) => {
+  // ...
+})
+```
+
+## Testing Both Browsers
+
+### Chrome
+
+1. Build: `npm run build`
+2. Open `chrome://extensions`
+3. Enable "Developer mode"
+4. Click "Load unpacked"
+5. Select `dist/chrome`
+
+### Firefox
+
+1. Build: `npm run build:firefox`
+2. Open `about:debugging#/runtime/this-firefox`
+3. Click "Load Temporary Add-on"
+4. Select `dist/firefox/manifest.json`
+
+<Note>
+  Use `web-ext` CLI for Firefox development:
+  ```bash
+  npm install --save-dev web-ext
+  web-ext run --source-dir dist/firefox
+  ```
+</Note>
+
+## Browser-Specific Features
+
+### Chrome-Only Features
+
+```typescript
+// Only include these in Chrome builds
+if (import.meta.env.MODE !== 'firefox') {
+  manifest.side_panel = {
+    default_path: 'sidepanel.html'
+  }
+}
+```
+
+### Firefox-Only Features
+
+```typescript
+// Firefox-specific permissions
+if (import.meta.env.MODE === 'firefox') {
+  manifest.permissions.push('tabs') // Firefox needs explicit tabs permission
+}
+```
+
+## Known Differences
+
+### Manifest V3 Support
+
+- **Chrome**: Full MV3 support
+- **Firefox**: MV3 support improving, some features still in development
+- Some MV2 APIs still available in Firefox
+
+### Service Workers
+
+- **Chrome**: Background service workers are required
+- **Firefox**: Still uses background scripts, service worker support limited
+
+### Web Accessible Resources
+
+- **Chrome**: Strict security with `use_dynamic_url`
+- **Firefox**: Simpler model without dynamic URLs
+
+## Best Practices
+
+1. **Test both browsers** regularly during development
+2. **Use webextension-polyfill** for API compatibility
+3. **Avoid browser-specific features** when possible
+4. **Use feature detection** instead of browser detection
+5. **Separate browser-specific code** into modules
+
+```typescript
+// Good - Feature detection
+if ('serviceWorker' in navigator) {
+  // Service worker code
+}
+
+// Avoid - Browser detection
+if (isChrome) {
+  // Chrome-specific code
+}
+```
+
+## Environment Variables
+
+Set browser-specific environment variables:
+
+```bash
+# .env.chrome
+VITE_BROWSER=chrome
+VITE_EXTENSION_ID=chrome-extension-id
+
+# .env.firefox
+VITE_BROWSER=firefox
+VITE_EXTENSION_ID=firefox-extension-id
+```
+
+Access in code:
+
+```typescript
+const browser = import.meta.env.VITE_BROWSER
+const extensionId = import.meta.env.VITE_EXTENSION_ID
+```
+
+## See Also
+
+- [Plugin Options](/config/plugin-options) - CRXJS configuration
+- [Vite Configuration](/config/vite-config) - Multi-browser build setup
+- [Chrome Extensions Documentation](https://developer.chrome.com/docs/extensions/)
+- [Firefox Extensions Documentation](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions)
+- [webextension-polyfill](https://github.com/mozilla/webextension-polyfill) - Cross-browser compatibility

@@ -1,0 +1,149 @@
+---
+title: 'Extension Manifest'
+description: 'How CRXJS parses and handles Chrome extension manifest files'
+---
+
+## Overview
+
+CRXJS parses your extension manifest to discover entry files and configure your build. The manifest is imported into your Vite config, so you can use JSON, JavaScript, or TypeScript.
+
+<Info>
+Paths in the manifest are relative to your [Vite project root](https://vitejs.dev/guide/#index-html-and-project-root), not to the manifest file location.
+</Info>
+
+## TypeScript Manifests
+
+CRXJS exports a `defineManifest` helper function similar to Vite's `defineConfig`. It provides autocompletion and supports dynamic or async manifest definitions.
+
+```typescript manifest.config.ts
+import { defineManifest } from '@crxjs/vite-plugin'
+import packageJson from './package.json'
+const { version } = packageJson
+
+// Convert from Semver (example: 0.1.0-beta6)
+const [major, minor, patch, label = '0'] = version
+  // can only contain digits, dots, or dash
+  .replace(/[^\d.-]+/g, '')
+  // split into version parts
+  .split(/[.-]/)
+
+export default defineManifest(async (env) => ({
+  manifest_version: 3,
+  name:
+    env.mode === 'staging'
+      ? '[INTERNAL] My Extension'
+      : 'My Extension',
+  // up to four numbers separated by dots
+  version: `${major}.${minor}.${patch}.${label}`,
+  // semver is OK in "version_name"
+  version_name: version,
+}))
+```
+
+<Tip>
+Chrome Extensions don't use Semver. Read about the [Chrome Extension version format](https://developer.chrome.com/docs/extensions/mv3/manifest/version/).
+</Tip>
+
+## Manifest Paths
+
+All paths inside the manifest are relative to your Vite project root. Use paths that start with a letter or directory name.
+
+<CodeGroup>
+```json Correct
+{
+  "options_page": "options.html",
+  "devtools_page": "pages/devtools.html"
+}
+```
+
+```json Incorrect
+{
+  "options_page": "./options.html",
+  "devtools_page": "/root/user/.../devtools.html"
+}
+```
+</CodeGroup>
+
+<Warning>
+Don't use relative (`./`) or absolute (`/`) path prefixes in manifest file paths.
+</Warning>
+
+## How CRXJS Processes the Manifest
+
+During the build, CRXJS:
+
+1. **Parses** the manifest to find all entry files (HTML pages, content scripts, background scripts)
+2. **Emits** these files as Rollup chunks for bundling
+3. **Transforms** file references to their final output names
+4. **Validates** that the manifest uses Manifest V3 (V2 is not supported)
+
+From the source code (plugin-manifest.ts:311):
+
+```typescript
+if (manifest.manifest_version !== 3)
+  throw new Error(
+    `CRXJS does not support Manifest v${manifest.manifest_version}, please use Manifest v3`
+  )
+```
+
+## JSON Schema Support
+
+For JSON manifests, use a schema for autocompletion and validation. Configure VSCode:
+
+```json settings.json
+{
+  "json.schemas": [
+    {
+      "fileMatch": ["manifest.json"],
+      "url": "https://json.schemastore.org/chrome-manifest.json"
+    }
+  ]
+}
+```
+
+## Dynamic Manifests
+
+The `defineManifest` function accepts an async function with environment info:
+
+```typescript
+export default defineManifest(async (env) => {
+  const isDev = env.mode === 'development'
+  
+  return {
+    manifest_version: 3,
+    name: isDev ? '[DEV] My Extension' : 'My Extension',
+    permissions: isDev 
+      ? ['storage', 'tabs', 'debugger'] 
+      : ['storage', 'tabs'],
+  }
+})
+```
+
+## Manifest Hooks
+
+CRXJS provides plugin hooks for transforming the manifest:
+
+- **`transformCrxManifest`** - Runs after initial parsing, before file emission
+- **`renderCrxManifest`** - Runs after bundling, before final manifest output
+
+These hooks enable CRXJS plugins to modify the manifest during the build process.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Pages" icon="browser" href="/concepts/pages">
+    Learn about HTML pages in extensions
+  </Card>
+  
+  <Card title="Background Scripts" icon="server" href="/concepts/background">
+    Configure service workers
+  </Card>
+  
+  <Card title="Content Scripts" icon="file-code" href="/concepts/content-scripts">
+    Inject scripts into web pages
+  </Card>
+  
+  <Card title="Web Accessible Resources" icon="globe" href="/concepts/web-accessible-resources">
+    Expose extension resources
+  </Card>
+</CardGroup>

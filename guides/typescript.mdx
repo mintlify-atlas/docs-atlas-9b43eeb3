@@ -1,0 +1,418 @@
+---
+title: TypeScript Configuration
+description: Configure TypeScript for Chrome extension development with CRXJS
+---
+
+CRXJS fully supports TypeScript out of the box. This guide covers TypeScript configuration, Chrome API types, and best practices for type-safe extension development.
+
+## Basic TypeScript Setup
+
+Install TypeScript and Chrome types:
+
+```bash
+npm install -D typescript @types/chrome @types/node
+```
+
+## TypeScript Configuration
+
+Create a `tsconfig.json` for your project:
+
+```json tsconfig.json
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    },
+    "types": ["vite/client", "chrome"],
+    "allowImportingTsExtensions": true,
+    "strict": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "skipLibCheck": true
+  },
+  "include": ["src"]
+}
+```
+
+### Project References
+
+For larger projects, use TypeScript project references:
+
+```json tsconfig.json
+{
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
+  ],
+  "files": []
+}
+```
+
+```json tsconfig.app.json
+{
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    },
+    "types": ["vite/client", "chrome"],
+    "strict": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "skipLibCheck": true
+  },
+  "include": ["src"]
+}
+```
+
+```json tsconfig.node.json
+{
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
+    "target": "ES2022",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["node"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": ["vite.config.ts", "manifest.config.ts"]
+}
+```
+
+## Chrome API Types
+
+The `@types/chrome` package provides complete types for Chrome extension APIs.
+
+### Using Chrome APIs
+
+```ts background.ts
+// Chrome APIs are fully typed
+chrome.runtime.onInstalled.addListener((details) => {
+  console.log('Extension installed:', details.reason)
+})
+
+// TypeScript knows the shape of chrome.tabs.Tab
+chrome.tabs.query({ active: true }, (tabs: chrome.tabs.Tab[]) => {
+  const activeTab = tabs[0]
+  console.log('Active tab:', activeTab.title)
+})
+```
+
+### Promises with Chrome APIs
+
+Chrome MV3 APIs support both callbacks and promises:
+
+```ts
+// Using promises (recommended)
+const tabs = await chrome.tabs.query({ active: true })
+console.log('Active tabs:', tabs)
+
+// Using callbacks
+chrome.tabs.query({ active: true }, (tabs) => {
+  console.log('Active tabs:', tabs)
+})
+```
+
+## Manifest Types
+
+Use `defineManifest` for type-safe manifest configuration:
+
+```ts manifest.config.ts
+import { defineManifest } from '@crxjs/vite-plugin'
+import pkg from './package.json'
+
+export default defineManifest({
+  manifest_version: 3,
+  name: pkg.name,
+  version: pkg.version,
+  icons: {
+    48: 'public/logo.png',
+  },
+  action: {
+    default_icon: {
+      48: 'public/logo.png',
+    },
+    default_popup: 'src/popup/index.html',
+  },
+  background: {
+    service_worker: 'src/background.ts',
+    type: 'module',
+  },
+  permissions: [
+    'storage',
+    'tabs',
+  ],
+  content_scripts: [{
+    js: ['src/content/main.ts'],
+    matches: ['https://*/*'],
+  }],
+})
+```
+
+<Note>
+  `defineManifest` provides full TypeScript IntelliSense and type checking for your manifest.
+</Note>
+
+## Path Aliases
+
+Configure path aliases for cleaner imports:
+
+```json tsconfig.json
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@components/*": ["src/components/*"],
+      "@utils/*": ["src/utils/*"]
+    }
+  }
+}
+```
+
+```ts vite.config.ts
+import path from 'node:path'
+import { defineConfig } from 'vite'
+
+export default defineConfig({
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, 'src'),
+      '@components': path.resolve(__dirname, 'src/components'),
+      '@utils': path.resolve(__dirname, 'src/utils'),
+    },
+  },
+})
+```
+
+Now you can import with clean paths:
+
+```ts
+import { Button } from '@components/Button'
+import { formatDate } from '@utils/date'
+```
+
+## Type-safe Message Passing
+
+Create type-safe communication between extension contexts:
+
+```ts types/messages.ts
+export type Message =
+  | { type: 'GET_TAB_INFO'; tabId: number }
+  | { type: 'UPDATE_BADGE'; text: string }
+  | { type: 'SAVE_DATA'; data: Record<string, unknown> }
+
+export type MessageResponse<T extends Message> = 
+  T extends { type: 'GET_TAB_INFO' } ? chrome.tabs.Tab :
+  T extends { type: 'UPDATE_BADGE' } ? { success: boolean } :
+  T extends { type: 'SAVE_DATA' } ? { success: boolean } :
+  never
+```
+
+```ts utils/messaging.ts
+import type { Message, MessageResponse } from '@/types/messages'
+
+export async function sendMessage<T extends Message>(
+  message: T
+): Promise<MessageResponse<T>> {
+  return chrome.runtime.sendMessage(message)
+}
+```
+
+Use it in your extension:
+
+```ts
+import { sendMessage } from '@/utils/messaging'
+
+// TypeScript knows the response type!
+const tab = await sendMessage({ 
+  type: 'GET_TAB_INFO', 
+  tabId: 123 
+})
+
+const result = await sendMessage({ 
+  type: 'UPDATE_BADGE', 
+  text: 'New' 
+})
+```
+
+## Type-safe Storage
+
+Create typed wrappers for Chrome storage:
+
+```ts utils/storage.ts
+interface StorageSchema {
+  theme: 'light' | 'dark'
+  count: number
+  user: {
+    name: string
+    email: string
+  }
+}
+
+export async function getStorage<K extends keyof StorageSchema>(
+  key: K
+): Promise<StorageSchema[K] | undefined> {
+  const result = await chrome.storage.sync.get(key)
+  return result[key]
+}
+
+export async function setStorage<K extends keyof StorageSchema>(
+  key: K,
+  value: StorageSchema[K]
+): Promise<void> {
+  await chrome.storage.sync.set({ [key]: value })
+}
+```
+
+Use it with full type safety:
+
+```ts
+// TypeScript knows theme is 'light' | 'dark'
+const theme = await getStorage('theme')
+
+// TypeScript enforces the correct type
+await setStorage('theme', 'dark') // ✓
+await setStorage('theme', 'blue') // ✗ Type error!
+
+// Complex objects are also typed
+const user = await getStorage('user')
+console.log(user?.name, user?.email)
+```
+
+## Import Assertions
+
+Import JSON files with type safety:
+
+```ts
+import pkg from './package.json' with { type: 'json' }
+
+console.log(pkg.name, pkg.version)
+```
+
+## Framework-Specific TypeScript
+
+<Tabs>
+  <Tab title="React">
+    ```json tsconfig.app.json
+    {
+      "compilerOptions": {
+        "jsx": "react-jsx",
+        "types": ["vite/client", "chrome"]
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="Vue">
+    ```json tsconfig.app.json
+    {
+      "compilerOptions": {
+        "jsx": "preserve",
+        "types": ["vite/client", "chrome"]
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="Svelte">
+    ```json tsconfig.json
+    {
+      "extends": "@tsconfig/svelte/tsconfig.json",
+      "compilerOptions": {
+        "types": ["vite/client", "chrome"]
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Build Script
+
+Add TypeScript type checking to your build:
+
+```json package.json
+{
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "type-check": "tsc -b --noEmit"
+  }
+}
+```
+
+## Best Practices
+
+### Use Strict Mode
+
+Enable strict TypeScript checks:
+
+```json
+{
+  "compilerOptions": {
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  }
+}
+```
+
+### Avoid `any`
+
+Use `unknown` instead of `any` when type is uncertain:
+
+```ts
+// Bad
+function handleMessage(message: any) {
+  console.log(message.type)
+}
+
+// Good
+function handleMessage(message: unknown) {
+  if (typeof message === 'object' && message !== null) {
+    console.log((message as Message).type)
+  }
+}
+```
+
+### Use Type Guards
+
+Create type guards for runtime type checking:
+
+```ts
+function isTab(obj: unknown): obj is chrome.tabs.Tab {
+  return (
+    typeof obj === 'object' &&
+    obj !== null &&
+    'id' in obj &&
+    'url' in obj
+  )
+}
+
+chrome.runtime.onMessage.addListener((message) => {
+  if (isTab(message)) {
+    console.log('Received tab:', message.url)
+  }
+})
+```
+
+## Next Steps
+
+- [Environment Variables](/guides/environment-variables) - Type-safe environment variables
+- [Building for Production](/guides/building-for-production) - Optimize TypeScript builds
