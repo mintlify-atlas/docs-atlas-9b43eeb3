@@ -1,0 +1,114 @@
+{
+  "projectType": "framework",
+  "projectName": "CRXJS Vite Plugin",
+  "projectDescription": "Build cross-browser Chrome extensions with Vite, featuring native HMR and zero-config setup",
+  "theme": "mint",
+  "primaryColor": "#298cd6",
+  "lightColor": "#f2bae4",
+  "darkColor": "#1a5d8f",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/manifest",
+              "concepts/pages",
+              "concepts/background",
+              "concepts/content-scripts",
+              "concepts/web-accessible-resources",
+              "concepts/hmr"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/react",
+              "guides/vue",
+              "guides/svelte",
+              "guides/typescript",
+              "guides/static-assets",
+              "guides/environment-variables",
+              "guides/building-for-production"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "config/plugin-options",
+              "config/vite-config",
+              "config/content-script-options",
+              "config/browser-support"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Plugin API",
+            "pages": [
+              "api/crx",
+              "api/chrome-extension"
+            ]
+          },
+          {
+            "group": "Manifest Helpers",
+            "pages": [
+              "api/define-manifest",
+              "api/define-dynamic-resource"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/files-ready",
+              "api/crx-plugin-interface"
+            ]
+          },
+          {
+            "group": "Types",
+            "pages": [
+              "api/types/manifest-v3",
+              "api/types/crx-options",
+              "api/types/crx-plugin"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Full Vite Plugin Ecosystem",
+    "Zero Configuration",
+    "Manifest V3 Support",
+    "True Hot Module Replacement for content scripts",
+    "Static Asset Import",
+    "Auto Web-Accessible Resources",
+    "TypeScript Support",
+    "Multi-framework Support (React, Vue, Svelte, Solid)"
+  ],
+  "publicApiSurface": [
+    "crx()",
+    "chromeExtension()",
+    "defineManifest()",
+    "defineDynamicResource()",
+    "allFilesReady()",
+    "filesReady()",
+    "CrxPlugin interface",
+    "CrxOptions interface",
+    "ManifestV3Export type",
+    "ManifestV3 type"
+  ]
+}
